@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/celular", "destination": "/public/celular.html" },
+    { "source": "/maestro", "destination": "/public/maestro.html" }
+  ]
+}
