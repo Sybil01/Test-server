@@ -19,8 +19,8 @@ const PORT = process.env.PORT || 3000;
 
 // Servidor HTTP para servir archivos estáticos (celular.html, maestro.html)
 const httpServer = http.createServer((req, res) => {
-  let filePath = "." + req.url;
-  if (filePath === "./") filePath = "./maestro.html";
+let filePath = "./public" + req.url;
+if (filePath === "./public/") filePath = "./public/maestro.html";
 
   const extname = path.extname(filePath);
   const contentTypes = {
