@@ -1,8 +1,7 @@
 {
+  "outputDirectory": "public",
   "rewrites": [
-    { "source": "/celular",      "destination": "/public/celular.html" },
-    { "source": "/celular.html", "destination": "/public/celular.html" },
-    { "source": "/maestro",      "destination": "/public/maestro.html" },
-    { "source": "/maestro.html", "destination": "/public/maestro.html" }
+    { "source": "/celular", "destination": "/celular.html" },
+    { "source": "/maestro", "destination": "/maestro.html" }
   ]
 }
