@@ -1,7 +1,13 @@
 {
-  "outputDirectory": "public",
-  "rewrites": [
-    { "source": "/celular", "destination": "/celular.html" },
-    { "source": "/maestro", "destination": "/maestro.html" }
+  "version": 2,
+  "builds": [
+    { "src": "celular.html", "use": "@vercel/static" },
+    { "src": "maestro.html", "use": "@vercel/static" },
+    { "src": "index.html", "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "/celular", "dest": "/celular.html" },
+    { "src": "/maestro", "dest": "/maestro.html" },
+    { "src": "/", "dest": "/index.html" }
   ]
 }
