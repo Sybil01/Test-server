@@ -201,7 +201,13 @@
 <script>
   // ── Configuración ──────────────────────────────────────────────
   // Cambiar por la IP/dominio del servidor en producción
-  const WS_URL = `ws://${location.hostname}:3000`;
+  const WS_URL = (() => {
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  const host = location.hostname === "localhost"
+    ? "localhost:3000"
+    : "tu-servidor.railway.app"; // ← reemplazar con la URL de Railway
+  return `${proto}//${host}`;
+})();
   const SEND_RATE = 30; // Hz — envío de datos al servidor
 
   // ── Estado ────────────────────────────────────────────────────
