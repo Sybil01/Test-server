@@ -124,7 +124,7 @@ wss.on("connection", (ws, req) => {
   });
 });
 
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, "0.0.0.0", () => {
   console.log(`\nCELUIDO — Servidor activo`);
   console.log(`  http://localhost:${PORT}/maestro.html  → cliente maestro`);
   console.log(`  http://localhost:${PORT}/celular.html  → controladores`);
