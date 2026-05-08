@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CELUIDO — Maestro</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #050508;
+      --grid: rgba(0,255,136,0.04);
+      --accent: #00ff88;
+      --accent2: #00ccff;
+      --dim: rgba(0,255,136,0.12);
+      --text: #c8ffe0;
+      --danger: #ff4466;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Share Tech Mono', monospace;
+    }
+
+    /* Grid de fondo */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Layout */
+    #app {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      height: 100vh;
+      padding: 1.5rem 2rem;
+      gap: 1rem;
+    }
+
+    /* Header */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .logo {
+      font-size: 1.4rem;
+      letter-spacing: 0.4em;
+      color: var(--accent);
+      text-shadow: 0 0 15px var(--accent);
+    }
+
+    .logo span {
+      font-size: 0.65rem;
+      letter-spacing: 0.2em;
+      opacity: 0.4;
+      margin-left: 1rem;
+    }
+
+    #ws-status {
+      font-size: 0.65rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+    }
+    #ws-status.ok { color: var(--accent); }
+    #ws-status.error { color: var(--danger); }
+
+    /* Área principal */
+    main {
+      display: grid;
+      grid-template-columns: 1fr 280px;
+      gap: 1.5rem;
+      overflow: hidden;
+    }
+
+    /* Canvas FM */
+    #canvas-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #fm-canvas {
+      width: 100%;
+      height: 100%;
+      max-height: 420px;
+    }
+
+    /* Panel de voces */
+    #panel-voces {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      overflow-y: auto;
+    }
+
+    .panel-titulo {
+      font-size: 0.6rem;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      opacity: 0.35;
+      margin-bottom: 0.3rem;
+    }
+
+    .voz-card {
+      border: 1px solid var(--dim);
+      padding: 0.7rem 0.9rem;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.3rem 0.8rem;
+      position: relative;
+      transition: border-color 0.15s;
+    }
+
+    .voz-card::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 2px;
+      background: var(--accent);
+      opacity: 0.3;
+      transition: opacity 0.1s;
+    }
+
+    .voz-card.activa::before { opacity: 1; }
+
+    .voz-nombre {
+      grid-column: 1 / -1;
+      font-size: 0.7rem;
+      color: var(--accent);
+      letter-spacing: 0.15em;
+      margin-bottom: 0.2rem;
+    }
+
+    .voz-param {
+      font-size: 0.65rem;
+      opacity: 0.55;
+    }
+
+    .voz-param span {
+      color: var(--text);
+      opacity: 1;
+    }
+
+    .voz-card.inactiva {
+      opacity: 0.3;
+    }
+
+    /* Footer */
+    footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    /* Control fundamental */
+    .ctrl-grupo {
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+    }
+
+    .ctrl-label {
+      font-size: 0.6rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      opacity: 0.4;
+    }
+
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 120px;
+      height: 2px;
+      background: var(--dim);
+      outline: none;
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 6px var(--accent);
+      cursor: pointer;
+    }
+
+    .ctrl-val {
+      font-size: 0.75rem;
+      color: var(--accent);
+      width: 3.5rem;
+      text-align: right;
+    }
+
+    /* Botón inicio */
+    #btn-iniciar {
+      padding: 0.6rem 1.4rem;
+      background: transparent;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.75rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background 0.2s, box-shadow 0.2s;
+    }
+
+    #btn-iniciar:hover {
+      background: var(--dim);
+      box-shadow: 0 0 12px var(--accent);
+    }
+
+    #btn-iniciar:disabled {
+      opacity: 0.3;
+      cursor: default;
+    }
+
+    /* Contador */
+    #voz-count {
+      font-size: 0.65rem;
+      letter-spacing: 0.15em;
+      opacity: 0.4;
+    }
+
+    #voz-count strong {
+      color: var(--accent);
+      opacity: 1;
+    }
+
+    /* Scrollbar */
+    #panel-voces::-webkit-scrollbar { width: 3px; }
+    #panel-voces::-webkit-scrollbar-track { background: transparent; }
+    #panel-voces::-webkit-scrollbar-thumb { background: var(--dim); }
+  </style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="logo">CELUIDO <span>síntesis distribuida</span></div>
+    <div id="ws-status">desconectado</div>
+  </header>
+
+  <main>
+    <div id="canvas-wrapper">
+      <canvas id="fm-canvas"></canvas>
+    </div>
+
+    <div id="panel-voces">
+      <div class="panel-titulo">voces activas</div>
+      <div id="lista-voces"></div>
+    </div>
+  </main>
+
+  <footer>
+    <button id="btn-iniciar">Iniciar audio</button>
+
+    <div class="ctrl-grupo">
+      <span class="ctrl-label">fund.</span>
+      <input type="range" id="ctrl-fundamental" min="50" max="500" value="150" step="1">
+      <span class="ctrl-val" id="val-fundamental">150 Hz</span>
+    </div>
+
+    <div class="ctrl-grupo">
+      <span class="ctrl-label">vol. maestro</span>
+      <input type="range" id="ctrl-master" min="0" max="1" value="0.7" step="0.01">
+      <span class="ctrl-val" id="val-master">0.70</span>
+    </div>
+
+    <div id="voz-count">voces: <strong>0</strong></div>
+  </footer>
+</div>
+
+<script>
+// ── Configuración ──────────────────────────────────────────────────
+const WS_URL = `ws://${location.hostname}:3000`;
+
+// ── Estado de audio ───────────────────────────────────────────────
+let audioCtx = null;
+let masterGainNode = null;
+let audioActivo = false;
+let fundamental = 150;
+let masterVol = 0.7;
+
+// ── Voces FM: Map id → { carrier, modulator, modGain, gainNode, params }
+const voces = new Map();
+
+// ── WebSocket ─────────────────────────────────────────────────────
+let ws;
+
+function conectarWS() {
+  ws = new WebSocket(WS_URL);
+  const statusEl = document.getElementById("ws-status");
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ type: "register", role: "maestro" }));
+    statusEl.textContent = "conectado";
+    statusEl.className = "ok";
+  };
+
+  ws.onmessage = (evt) => {
+    const msg = JSON.parse(evt.data);
+
+    if (msg.type === "state") {
+      // Estado inicial: crear voces para controladores ya conectados
+      msg.voices.forEach(id => crearVoz(id));
+      actualizarContador(msg.voiceCount);
+    }
+    else if (msg.type === "connect") {
+      crearVoz(msg.id);
+      actualizarContador(msg.voiceCount);
+      renderVoces();
+    }
+    else if (msg.type === "disconnect") {
+      eliminarVoz(msg.id);
+      actualizarContador(msg.voiceCount);
+      renderVoces();
+    }
+    else if (msg.type === "control") {
+      recibirControl(msg);
+    }
+  };
+
+  ws.onclose = () => {
+    statusEl.textContent = "desconectado — reintentando…";
+    statusEl.className = "error";
+    setTimeout(conectarWS, 2000);
+  };
+
+  ws.onerror = () => ws.close();
+}
+
+// ── Síntesis FM ───────────────────────────────────────────────────
+/*
+  Arquitectura por voz:
+  
+  [modulador OSC] → [modGain] → frecuencia de [portadora OSC]
+                                    ↓
+                               [ampGain] → [masterGain] → destination
+  
+  Parámetros de control:
+  - ratio       → frecuencia del modulador = fundamental * ratio
+  - modIndex    → ganancia del modulador (índice de modulación) = modIndex * freq_portadora
+  - amp         → ganancia de amplitud de la voz
+*/
+
+function crearVoz(id) {
+  if (!audioCtx || voces.has(id)) return;
+
+  const carrier = audioCtx.createOscillator();
+  const modulator = audioCtx.createOscillator();
+  const modGain = audioCtx.createGain();
+  const ampGain = audioCtx.createGain();
+
+  carrier.type = "sine";
+  modulator.type = "sine";
+
+  carrier.frequency.value = fundamental;
+  modulator.frequency.value = fundamental; // ratio 1:1 inicial
+  modGain.gain.value = 0;                  // índice de mod. inicial = 0
+  ampGain.gain.value = 0;
+
+  // Conexiones FM
+  modulator.connect(modGain);
+  modGain.connect(carrier.frequency); // FM: modulador → frecuencia de portadora
+  carrier.connect(ampGain);
+  ampGain.connect(masterGainNode);
+
+  modulator.start();
+  carrier.start();
+
+  voces.set(id, {
+    carrier, modulator, modGain, ampGain,
+    params: { ratio: 1, modIndex: 0, amp: 0, beta: 0, gamma: 0 }
+  });
+
+  renderVoces();
+}
+
+function eliminarVoz(id) {
+  if (!voces.has(id)) return;
+  const v = voces.get(id);
+  const t = audioCtx ? audioCtx.currentTime : 0;
+
+  // Fade out antes de desconectar
+  v.ampGain.gain.setTargetAtTime(0, t, 0.05);
+  setTimeout(() => {
+    try {
+      v.carrier.stop();
+      v.modulator.stop();
+    } catch(e) {}
+    v.carrier.disconnect();
+    v.modulator.disconnect();
+    v.modGain.disconnect();
+    v.ampGain.disconnect();
+  }, 300);
+
+  voces.delete(id);
+  renderVoces();
+}
+
+function recibirControl(msg) {
+  const v = voces.get(msg.id);
+  if (!v || !audioCtx) return;
+
+  const t = audioCtx.currentTime;
+  const { ratio, modIndex, amp } = msg;
+
+  // Frecuencia portadora = fundamental (fija)
+  v.carrier.frequency.setTargetAtTime(fundamental, t, 0.05);
+
+  // Frecuencia moduladora = fundamental * ratio
+  const fMod = fundamental * ratio;
+  v.modulator.frequency.setTargetAtTime(fMod, t, 0.05);
+
+  // Índice de modulación → ganancia del modulador (escala sobre la freq. portadora)
+  const modGainVal = modIndex * fundamental * 0.5;
+  v.modGain.gain.setTargetAtTime(modGainVal, t, 0.05);
+
+  // Amplitud de voz (con atenuación por nº de voces para evitar clipping)
+  const vocesCont = Math.max(1, voces.size);
+  const ampScaled = amp / Math.sqrt(vocesCont);
+  v.ampGain.gain.setTargetAtTime(ampScaled, t, 0.03);
+
+  // Actualizar params locales para UI
+  v.params = { ratio, modIndex, amp, beta: msg.beta, gamma: msg.gamma };
+
+  // Actualizar card
+  actualizarCard(msg.id);
+}
+
+function actualizarFundamental(f) {
+  fundamental = f;
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  voces.forEach(v => {
+    v.carrier.frequency.setTargetAtTime(f, t, 0.05);
+    v.modulator.frequency.setTargetAtTime(f * v.params.ratio, t, 0.05);
+  });
+}
+
+// ── Audio Context ─────────────────────────────────────────────────
+document.getElementById("btn-iniciar").addEventListener("click", () => {
+  if (audioActivo) return;
+
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  masterGainNode = audioCtx.createGain();
+  masterGainNode.gain.value = masterVol;
+  masterGainNode.connect(audioCtx.destination);
+
+  audioActivo = true;
+  document.getElementById("btn-iniciar").disabled = true;
+  document.getElementById("btn-iniciar").textContent = "audio activo";
+
+  // Crear voces para controladores ya conectados
+  voces.forEach((_, id) => {}); // voces ya creadas si msg llegó antes
+  // Re-crear voces que llegaron antes del audioCtx
+  ws && ws.readyState === WebSocket.OPEN &&
+    ws.send(JSON.stringify({ type: "register", role: "maestro" }));
+});
+
+// ── Controles UI ──────────────────────────────────────────────────
+document.getElementById("ctrl-fundamental").addEventListener("input", (e) => {
+  fundamental = parseFloat(e.target.value);
+  document.getElementById("val-fundamental").textContent = `${fundamental} Hz`;
+  actualizarFundamental(fundamental);
+});
+
+document.getElementById("ctrl-master").addEventListener("input", (e) => {
+  masterVol = parseFloat(e.target.value);
+  document.getElementById("val-master").textContent = masterVol.toFixed(2);
+  if (masterGainNode) masterGainNode.gain.setTargetAtTime(masterVol, audioCtx.currentTime, 0.05);
+});
+
+// ── UI voces ──────────────────────────────────────────────────────
+function renderVoces() {
+  const container = document.getElementById("lista-voces");
+  container.innerHTML = "";
+
+  if (voces.size === 0) {
+    container.innerHTML = `<div style="font-size:0.65rem;opacity:0.25;letter-spacing:0.1em">sin controladores</div>`;
+    return;
+  }
+
+  voces.forEach((v, id) => {
+    const card = document.createElement("div");
+    card.className = "voz-card";
+    card.id = `card-${id}`;
+    card.innerHTML = `
+      <div class="voz-nombre">${id}</div>
+      <div class="voz-param">ratio <span id="${id}-ratio">—</span></div>
+      <div class="voz-param">mod.idx <span id="${id}-mod">—</span></div>
+      <div class="voz-param">amp <span id="${id}-amp">—</span></div>
+      <div class="voz-param">β <span id="${id}-beta">—</span></div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+function actualizarCard(id) {
+  const v = voces.get(id);
+  if (!v) return;
+  const p = v.params;
+
+  const setTxt = (sel, val) => {
+    const el = document.getElementById(sel);
+    if (el) el.textContent = val;
+  };
+
+  setTxt(`${id}-ratio`, p.ratio.toFixed(1));
+  setTxt(`${id}-mod`, p.modIndex.toFixed(1));
+  setTxt(`${id}-amp`, p.amp.toFixed(2));
+  setTxt(`${id}-beta`, p.beta !== undefined ? p.beta.toFixed(0) + "°" : "—");
+
+  const card = document.getElementById(`card-${id}`);
+  if (card) {
+    card.classList.toggle("activa", p.amp > 0.05);
+  }
+}
+
+function actualizarContador(n) {
+  document.querySelector("#voz-count strong").textContent = n;
+}
+
+// ── Visualizador FM (osciloscopio Lissajous aproximado) ───────────
+const canvas = document.getElementById("fm-canvas");
+const ctx2d = canvas.getContext("2d");
+
+function resizeCanvas() {
+  const wrapper = document.getElementById("canvas-wrapper");
+  canvas.width = wrapper.clientWidth;
+  canvas.height = wrapper.clientHeight;
+}
+
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
+
+let vizPhase = 0;
+
+function drawFM() {
+  requestAnimationFrame(drawFM);
+
+  const W = canvas.width, H = canvas.height;
+  const CX = W / 2, CY = H / 2;
+
+  // Trail
+  ctx2d.fillStyle = "rgba(5,5,8,0.12)";
+  ctx2d.fillRect(0, 0, W, H);
+
+  if (!audioActivo || voces.size === 0) {
+    // Estado inactivo — círculo latente
+    ctx2d.beginPath();
+    ctx2d.arc(CX, CY, 2, 0, Math.PI * 2);
+    ctx2d.fillStyle = "rgba(0,255,136,0.2)";
+    ctx2d.fill();
+    return;
+  }
+
+  vizPhase += 0.015;
+
+  // Dibujar figura de Lissajous combinando todas las voces activas
+  let vocesArr = Array.from(voces.values()).filter(v => v.params.amp > 0.01);
+  if (vocesArr.length === 0) return;
+
+  const POINTS = 512;
+  const RADIUS = Math.min(W, H) * 0.4;
+
+  ctx2d.beginPath();
+
+  for (let i = 0; i <= POINTS; i++) {
+    const t = (i / POINTS) * Math.PI * 2;
+    let x = 0, y = 0;
+    let totalAmp = 0;
+
+    vocesArr.forEach((v, vi) => {
+      const { ratio, modIndex, amp } = v.params;
+      const fm = modIndex * 0.15; // escala visual del índice
+      const phase = vizPhase + vi * (Math.PI * 2 / vocesArr.length);
+
+      // Síntesis FM visual: x e y con modulación de fase
+      x += amp * Math.sin(t + fm * Math.sin(ratio * t + phase));
+      y += amp * Math.cos(t * ratio + fm * Math.cos(t + phase));
+      totalAmp += amp;
+    });
+
+    const scale = RADIUS / Math.max(vocesArr.length, 1);
+    const px = CX + x * scale;
+    const py = CY + y * scale;
+
+    if (i === 0) ctx2d.moveTo(px, py);
+    else ctx2d.lineTo(px, py);
+  }
+
+  const avgAmp = vocesArr.reduce((s, v) => s + v.params.amp, 0) / vocesArr.length;
+  ctx2d.strokeStyle = `rgba(0,255,136,${0.3 + avgAmp * 0.6})`;
+  ctx2d.lineWidth = 1 + avgAmp * 1.5;
+  ctx2d.stroke();
+
+  // Puntos de cada voz
+  vocesArr.forEach((v, vi) => {
+    const { ratio, modIndex, amp } = v.params;
+    const angle = vizPhase * ratio + vi * (Math.PI * 2 / vocesArr.length);
+    const r = RADIUS * 0.3 + modIndex * 8;
+    const px = CX + Math.cos(angle) * r;
+    const py = CY + Math.sin(angle) * r;
+
+    ctx2d.beginPath();
+    ctx2d.arc(px, py, 3 + amp * 5, 0, Math.PI * 2);
+    ctx2d.fillStyle = `rgba(0,204,255,${0.5 + amp * 0.5})`;
+    ctx2d.fill();
+  });
+}
+
+// ── Init ──────────────────────────────────────────────────────────
+conectarWS();
+drawFM();
+</script>
+</body>
+</html>
