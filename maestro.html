@@ -292,7 +292,7 @@ const WS_URL = (() => {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   const host = location.hostname === "localhost"
     ? "localhost:3000"
-    : "test-server-production-dc7f.up.railway.app"; // ← reemplazar con la URL de Railway
+    : "https://servidor-de-celuido.onrender.com"; // ← reemplazar con la URL
   return `${proto}//${host}`;
 })();
 
