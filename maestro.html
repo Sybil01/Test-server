@@ -292,7 +292,7 @@ const WS_URL = (() => {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   const host = location.hostname === "localhost"
     ? "localhost:3000"
-    : "https://servidor-de-celuido.onrender.com"; // ← reemplazar con la URL
+    : "servidor-de-celuido.onrender.com"; // ← reemplazar con la URL
   return `${proto}//${host}`;
 })();
 
