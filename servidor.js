@@ -1,13 +1,12 @@
 /**
  * CELUIDO — Servidor WebSocket
  * Relay de señales gestuales: celulares → maestro
- * 
+ *
  * Protocolo de mensajes:
- *   celular → server: { type: "control", id, ratio, modIndex, amp, beta, gamma }
- *   server → maestro: { type: "control", id, ratio, modIndex, amp, beta, gamma }
+ *   celular → server: { type: "control", kind: "state"|"event"|"mute", ... }
+ *   server → maestro: { type: "control", id, kind, ... }  (mismo payload + id)
  *   server → maestro: { type: "connect", id, voiceCount }
  *   server → maestro: { type: "disconnect", id, voiceCount }
- *   server → todos:   { type: "ping" }
  */
 
 const WebSocket = require("ws");
@@ -19,8 +18,8 @@ const PORT = process.env.PORT || 3000;
 
 // Servidor HTTP para servir archivos estáticos (celular.html, maestro.html)
 const httpServer = http.createServer((req, res) => {
-let filePath = "./public" + req.url;
-if (filePath === "./public/") filePath = "./public/maestro.html";
+  let filePath = "./public" + req.url;
+  if (filePath === "./public/") filePath = "./public/maestro.html";
 
   const extname = path.extname(filePath);
   const contentTypes = {
@@ -46,7 +45,7 @@ const wss = new WebSocket.Server({ server: httpServer });
 
 // Registro de clientes
 const controladores = new Map(); // id → ws (celulares)
-let maestro = null;              // cliente maestro único
+let maestro = null; // cliente maestro único
 let voiceCounter = 0;
 
 function broadcast(data) {
@@ -82,7 +81,6 @@ wss.on("connection", (ws, req) => {
           voices: Array.from(controladores.keys()),
         }));
         console.log(`[+] Maestro conectado desde ${ip}`);
-
       } else if (clientRole === "controlador") {
         voiceCounter++;
         clientId = `voz-${voiceCounter}`;
@@ -95,16 +93,12 @@ wss.on("connection", (ws, req) => {
     }
 
     // Relay de datos de control: controlador → maestro
+    // Genérico: se reenvía el mensaje completo (kind, state, event, faceUp,
+    // duration, priority, etc.) agregando el id asignado por el servidor.
+    // No se reconstruye campo por campo para no acoplar el servidor al
+    // protocolo de gestos, que puede seguir cambiando en celular.html/maestro.html.
     if (msg.type === "control" && clientRole === "controlador" && clientId) {
-      broadcast({
-        type: "control",
-        id: clientId,
-        ratio: msg.ratio,
-        modIndex: msg.modIndex,
-        amp: msg.amp,
-        beta: msg.beta,
-        gamma: msg.gamma,
-      });
+      broadcast({ ...msg, id: clientId });
     }
   });
 
@@ -126,7 +120,7 @@ wss.on("connection", (ws, req) => {
 
 httpServer.listen(PORT, "0.0.0.0", () => {
   console.log(`\nCELUIDO — Servidor activo`);
-  console.log(`  http://localhost:${PORT}/maestro.html  → cliente maestro`);
-  console.log(`  http://localhost:${PORT}/celular.html  → controladores`);
-  console.log(`  ws://localhost:${PORT}               → WebSocket\n`);
+  console.log(`  http://localhost:${PORT}/maestro.html    → cliente maestro`);
+  console.log(`  http://localhost:${PORT}/celular.html    → controladores`);
+  console.log(`  ws://localhost:${PORT}                   → WebSocket\n`);
 });
