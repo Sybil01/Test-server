@@ -1,640 +1,708 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CELUIDO — Maestro</title>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CELUIDO — Maestro</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #050508;
+  --grid: rgba(0,255,136,0.04);
+  --accent: #00ff88;
+  --accent2: #00ccff;
+  --dim: rgba(0,255,136,0.12);
+  --text: #c8ffe0;
+  --danger: #ff4466;
+}
+html, body {
+  width: 100%; height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Share Tech Mono', monospace;
+  overflow: hidden;
+}
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+#app {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100vh;
+  padding: 1.2rem 1.5rem;
+  gap: 1rem;
+}
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.logo {
+  font-size: 1.3rem;
+  letter-spacing: 0.35em;
+  color: var(--accent);
+  text-shadow: 0 0 15px var(--accent);
+}
+.logo span {
+  font-size: 0.6rem;
+  letter-spacing: 0.15em;
+  opacity: 0.4;
+  margin-left: 1rem;
+}
+#ws-status { font-size: 0.65rem; letter-spacing: 0.2em; text-transform: uppercase; }
+#ws-status.ok { color: var(--accent); }
+#ws-status.error { color: var(--danger); }
 
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+.ctrl-grupo { display: flex; align-items: center; gap: 0.6rem; }
+.ctrl-label { font-size: 0.6rem; letter-spacing: 0.15em; text-transform: uppercase; opacity: 0.45; }
+input[type=range] {
+  -webkit-appearance: none;
+  width: 110px; height: 2px;
+  background: var(--dim);
+  outline: none;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 11px; height: 11px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+  cursor: pointer;
+}
+.ctrl-val { font-size: 0.7rem; color: var(--accent); width: 3.2rem; text-align: right; }
 
-    :root {
-      --bg: #050508;
-      --grid: rgba(0,255,136,0.04);
-      --accent: #00ff88;
-      --accent2: #00ccff;
-      --dim: rgba(0,255,136,0.12);
-      --text: #c8ffe0;
-      --danger: #ff4466;
-    }
+#btn-iniciar {
+  padding: 0.5rem 1.2rem;
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase;
+  cursor: pointer;
+}
+#btn-iniciar:disabled { opacity: 0.3; cursor: default; }
 
-    html, body {
-      width: 100%; height: 100%;
-      overflow: hidden;
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'Share Tech Mono', monospace;
-    }
+main {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 1rem;
+  overflow: hidden;
+}
 
-    /* Grid de fondo */
-    body::before {
-      content: '';
-      position: fixed; inset: 0;
-      background-image:
-        linear-gradient(var(--grid) 1px, transparent 1px),
-        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
-      background-size: 40px 40px;
-      pointer-events: none;
-      z-index: 0;
-    }
+/* ── Panel de voces ────────────────────────────────────────── */
+#panel-voces { display: flex; flex-direction: column; gap: 0.6rem; overflow-y: auto; }
+.panel-titulo { font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase; opacity: 0.35; }
+.voz-card {
+  border: 1px solid var(--dim);
+  padding: 0.6rem 0.8rem;
+  position: relative;
+  font-size: 0.7rem;
+}
+.voz-card.muted { border-color: var(--danger); }
+.voz-nombre { color: var(--accent); letter-spacing: 0.1em; margin-bottom: 0.3rem; }
+.voz-linea { opacity: 0.6; display: flex; justify-content: space-between; }
+.voz-linea span:last-child { color: var(--text); opacity: 1; }
+.voz-roles { display: flex; gap: 0.4rem; margin-top: 0.4rem; }
+.voz-roles button {
+  flex: 1;
+  background: transparent;
+  border: 1px solid var(--dim);
+  color: var(--text);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.6rem;
+  padding: 0.25rem;
+  cursor: pointer;
+  letter-spacing: 0.1em;
+}
+.voz-roles button.activo { border-color: var(--accent); color: var(--accent); }
 
-    /* Layout */
-    #app {
-      position: relative;
-      z-index: 1;
-      display: grid;
-      grid-template-rows: auto 1fr auto;
-      height: 100vh;
-      padding: 1.5rem 2rem;
-      gap: 1rem;
-    }
+/* ── Panel de parámetros ──────────────────────────────────── */
+#panel-config { overflow-y: auto; padding-right: 0.5rem; }
+.grupo-params {
+  border: 1px solid var(--dim);
+  padding: 0.6rem 0.8rem;
+  margin-bottom: 0.7rem;
+}
+.grupo-titulo {
+  font-size: 0.62rem; letter-spacing: 0.15em; text-transform: uppercase;
+  color: var(--accent2); opacity: 0.8; margin-bottom: 0.4rem;
+}
+.param-row {
+  display: flex; align-items: center; gap: 0.6rem;
+  font-size: 0.65rem; opacity: 0.7;
+  padding: 0.15rem 0;
+}
+.param-row span:first-child { width: 110px; flex-shrink: 0; }
+.param-row input[type=range] { flex: 1; width: auto; }
+.param-row span:last-child { width: 3.4rem; text-align: right; color: var(--accent); opacity: 1; }
 
-    /* Header */
-    header {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-    }
-
-    .logo {
-      font-size: 1.4rem;
-      letter-spacing: 0.4em;
-      color: var(--accent);
-      text-shadow: 0 0 15px var(--accent);
-    }
-
-    .logo span {
-      font-size: 0.65rem;
-      letter-spacing: 0.2em;
-      opacity: 0.4;
-      margin-left: 1rem;
-    }
-
-    #ws-status {
-      font-size: 0.65rem;
-      letter-spacing: 0.2em;
-      text-transform: uppercase;
-    }
-    #ws-status.ok { color: var(--accent); }
-    #ws-status.error { color: var(--danger); }
-
-    /* Área principal */
-    main {
-      display: grid;
-      grid-template-columns: 1fr 280px;
-      gap: 1.5rem;
-      overflow: hidden;
-    }
-
-    /* Canvas FM */
-    #canvas-wrapper {
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    #fm-canvas {
-      width: 100%;
-      height: 100%;
-      max-height: 420px;
-    }
-
-    /* Panel de voces */
-    #panel-voces {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-      overflow-y: auto;
-    }
-
-    .panel-titulo {
-      font-size: 0.6rem;
-      letter-spacing: 0.25em;
-      text-transform: uppercase;
-      opacity: 0.35;
-      margin-bottom: 0.3rem;
-    }
-
-    .voz-card {
-      border: 1px solid var(--dim);
-      padding: 0.7rem 0.9rem;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0.3rem 0.8rem;
-      position: relative;
-      transition: border-color 0.15s;
-    }
-
-    .voz-card::before {
-      content: '';
-      position: absolute;
-      left: 0; top: 0; bottom: 0;
-      width: 2px;
-      background: var(--accent);
-      opacity: 0.3;
-      transition: opacity 0.1s;
-    }
-
-    .voz-card.activa::before { opacity: 1; }
-
-    .voz-nombre {
-      grid-column: 1 / -1;
-      font-size: 0.7rem;
-      color: var(--accent);
-      letter-spacing: 0.15em;
-      margin-bottom: 0.2rem;
-    }
-
-    .voz-param {
-      font-size: 0.65rem;
-      opacity: 0.55;
-    }
-
-    .voz-param span {
-      color: var(--text);
-      opacity: 1;
-    }
-
-    .voz-card.inactiva {
-      opacity: 0.3;
-    }
-
-    /* Footer */
-    footer {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 1rem;
-    }
-
-    /* Control fundamental */
-    .ctrl-grupo {
-      display: flex;
-      align-items: center;
-      gap: 0.7rem;
-    }
-
-    .ctrl-label {
-      font-size: 0.6rem;
-      letter-spacing: 0.2em;
-      text-transform: uppercase;
-      opacity: 0.4;
-    }
-
-    input[type=range] {
-      -webkit-appearance: none;
-      width: 120px;
-      height: 2px;
-      background: var(--dim);
-      outline: none;
-    }
-
-    input[type=range]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 12px; height: 12px;
-      border-radius: 50%;
-      background: var(--accent);
-      box-shadow: 0 0 6px var(--accent);
-      cursor: pointer;
-    }
-
-    .ctrl-val {
-      font-size: 0.75rem;
-      color: var(--accent);
-      width: 3.5rem;
-      text-align: right;
-    }
-
-    /* Botón inicio */
-    #btn-iniciar {
-      padding: 0.6rem 1.4rem;
-      background: transparent;
-      border: 1px solid var(--accent);
-      color: var(--accent);
-      font-family: 'Share Tech Mono', monospace;
-      font-size: 0.75rem;
-      letter-spacing: 0.2em;
-      text-transform: uppercase;
-      cursor: pointer;
-      transition: background 0.2s, box-shadow 0.2s;
-    }
-
-    #btn-iniciar:hover {
-      background: var(--dim);
-      box-shadow: 0 0 12px var(--accent);
-    }
-
-    #btn-iniciar:disabled {
-      opacity: 0.3;
-      cursor: default;
-    }
-
-    /* Contador */
-    #voz-count {
-      font-size: 0.65rem;
-      letter-spacing: 0.15em;
-      opacity: 0.4;
-    }
-
-    #voz-count strong {
-      color: var(--accent);
-      opacity: 1;
-    }
-
-    /* Scrollbar */
-    #panel-voces::-webkit-scrollbar { width: 3px; }
-    #panel-voces::-webkit-scrollbar-track { background: transparent; }
-    #panel-voces::-webkit-scrollbar-thumb { background: var(--dim); }
-  </style>
+#panel-voces::-webkit-scrollbar, #panel-config::-webkit-scrollbar { width: 3px; }
+#panel-voces::-webkit-scrollbar-thumb, #panel-config::-webkit-scrollbar-thumb { background: var(--dim); }
+</style>
 </head>
 <body>
 <div id="app">
   <header>
-    <div class="logo">CELUIDO <span>síntesis distribuida</span></div>
-    <div id="ws-status">desconectado</div>
-  </header>
-
-  <main>
-    <div id="canvas-wrapper">
-      <canvas id="fm-canvas"></canvas>
-    </div>
-
-    <div id="panel-voces">
-      <div class="panel-titulo">voces activas</div>
-      <div id="lista-voces"></div>
-    </div>
-  </main>
-
-  <footer>
-    <button id="btn-iniciar">Iniciar audio</button>
-
+    <div class="logo">CELUIDO <span>síntesis distribuida — motores por gesto</span></div>
     <div class="ctrl-grupo">
-      <span class="ctrl-label">fund.</span>
-      <input type="range" id="ctrl-fundamental" min="50" max="500" value="150" step="1">
-      <span class="ctrl-val" id="val-fundamental">150 Hz</span>
-    </div>
-
-    <div class="ctrl-grupo">
+      <button id="btn-iniciar">Iniciar audio</button>
       <span class="ctrl-label">vol. maestro</span>
       <input type="range" id="ctrl-master" min="0" max="1" value="0.7" step="0.01">
       <span class="ctrl-val" id="val-master">0.70</span>
+      <div id="ws-status">desconectado</div>
     </div>
+  </header>
 
-    <div id="voz-count">voces: <strong>0</strong></div>
-  </footer>
+  <main>
+    <div id="panel-voces">
+      <div class="panel-titulo">voces conectadas</div>
+      <div id="lista-voces"></div>
+    </div>
+    <div id="panel-config"></div>
+  </main>
 </div>
 
 <script>
-// ── Configuración ──────────────────────────────────────────────────
-const WS_URL = (() => {
-  const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  const host = location.hostname === "localhost"
-    ? "localhost:3000"
-    : "servidor-de-celuido.onrender.com"; // ← reemplazar con la URL
-  return `${proto}//${host}`;
-})();
+/* ============================================================
+   CELUIDO — Maestro (maestro.html)
+   Recibe { kind: 'state'|'event'|'mute', ... } por celular y
+   mapea a motores de síntesis según el ROL asignado a esa voz
+   (c1 / c2). La clasificación de gestos NO vive acá — solo el
+   mapeo gesto → sonido.
+   ============================================================ */
 
-// ── Estado de audio ───────────────────────────────────────────────
-let audioCtx = null;
-let masterGainNode = null;
-let audioActivo = false;
-let fundamental = 150;
+// ── PARAMS: todo lo que el panel de la derecha permite ajustar ──
+const PARAMS = {
+  c1: {
+    perc:  { attack: 0.002, decay: 0.07, filterMin: 800, filterMax: 3000 },
+    gran:  { grainMin: 0.01, grainMax: 0.12, densityMin: 5, densityMax: 40,
+             filterMin: 300, filterMax: 6000, irregularidad: 0.7 },
+    still: { freq: 164.81, attack: 0.6, vibratoRateMin: 4, vibratoRateMax: 6.5,
+             vibratoDepth: 6, microAmp: 0.04 },
+  },
+  c2: {
+    fast:   { fadeIn: 0.015, fadeOut: 0.05, volumen: 0.4 },
+    glitch: { densityMin: 8, densityMax: 35, probCorte: 0.3,
+              burstMin: 0.02, burstMax: 0.25, distorsion: 40 },
+    still:  { freqA: 110.00, freqC: 130.81, durMin: 1.5, durMax: 6,
+              vibratoRateMin: 4, vibratoRateMax: 6.5, vibratoDepth: 6, microAmp: 0.04 },
+  },
+};
+
+function randRange(a, b) { return a + Math.random() * (b - a); }
+function setDeep(obj, path, value) {
+  let o = obj;
+  for (let i = 0; i < path.length - 1; i++) o = o[path[i]];
+  o[path[path.length - 1]] = value;
+}
+
+// ── Utilidades de audio ──────────────────────────────────────────
+function crearBufferRuido(ctx, segundos = 2) {
+  const buffer = ctx.createBuffer(1, ctx.sampleRate * segundos, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  return buffer;
+}
+function crearCurvaDistorsion(cantidad = 40) {
+  const n = 44100;
+  const curve = new Float32Array(n);
+  const deg = Math.PI / 180;
+  for (let i = 0; i < n; i++) {
+    const x = (i * 2) / n - 1;
+    curve[i] = ((3 + cantidad) * x * 20 * deg) / (Math.PI + cantidad * Math.abs(x));
+  }
+  return curve;
+}
+
+// ── Motor: percusión (Celular 1 / FAST) ──────────────────────────
+function crearMotorPercusion(ctx, out, ruido) {
+  return {
+    trigger() {
+      const p = PARAMS.c1.perc;
+      const t = ctx.currentTime;
+      const src = ctx.createBufferSource();
+      src.buffer = ruido;
+      const filtro = ctx.createBiquadFilter();
+      filtro.type = 'bandpass';
+      filtro.frequency.value = randRange(p.filterMin, p.filterMax);
+      filtro.Q.value = randRange(2, 8);
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0, t);
+      env.gain.linearRampToValueAtTime(1, t + Math.max(p.attack, 0.001));
+      env.gain.exponentialRampToValueAtTime(0.0001, t + p.attack + Math.max(p.decay, 0.01));
+      src.connect(filtro); filtro.connect(env); env.connect(out);
+      src.start(t);
+      src.stop(t + p.attack + p.decay + 0.05);
+    },
+  };
+}
+
+// ── Motor: granular (Celular 1 / SLOW — ref. Vaggione) ───────────
+function crearMotorGranular(ctx, out, ruido) {
+  let activo = false, timeoutId = null;
+  function programarGrano() {
+    if (!activo) return;
+    const p = PARAMS.c1.gran;
+    const t = ctx.currentTime;
+    const dur = randRange(p.grainMin, p.grainMax);
+    const src = ctx.createBufferSource();
+    src.buffer = ruido;
+    src.playbackRate.value = randRange(0.5, 2.5) * (Math.random() < 0.5 ? 1 : -1);
+    const offset = Math.max(Math.random() * (ruido.duration - dur - 0.02), 0);
+    const filtro = ctx.createBiquadFilter();
+    filtro.type = Math.random() < 0.5 ? 'bandpass' : 'highpass';
+    filtro.frequency.value = randRange(p.filterMin, p.filterMax);
+    filtro.Q.value = randRange(0.5, 6);
+    const env = ctx.createGain();
+    const amp = randRange(0.15, 0.9) * (1 - p.irregularidad * 0.5 + Math.random() * p.irregularidad);
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(Math.max(amp, 0), t + dur * 0.3);
+    env.gain.linearRampToValueAtTime(0, t + dur);
+    src.connect(filtro); filtro.connect(env); env.connect(out);
+    src.start(t, offset, dur);
+    const densidad = randRange(p.densityMin, p.densityMax);
+    const intervalo = (1000 / densidad) * randRange(1 - p.irregularidad * 0.6, 1 + p.irregularidad * 0.6);
+    timeoutId = setTimeout(programarGrano, Math.max(intervalo, 5));
+  }
+  return {
+    start() { if (activo) return; activo = true; programarGrano(); },
+    stop() { activo = false; clearTimeout(timeoutId); },
+  };
+}
+
+// ── Motor: tono sostenido con vibrato irregular (STILL, C1 y C2) ─
+function crearMotorTono(ctx, out) {
+  let nodos = null;
+  return {
+    start(freq, paramsGetter) {
+      if (nodos) return;
+      const p = paramsGetter();
+      const t = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.value = freq;
+      const filtro = ctx.createBiquadFilter();
+      filtro.type = 'lowpass';
+      filtro.frequency.value = freq * 6;
+      filtro.Q.value = 1;
+      const gainPrincipal = ctx.createGain();
+      gainPrincipal.gain.setValueAtTime(0, t);
+      gainPrincipal.gain.linearRampToValueAtTime(0.5, t + Math.max(p.attack || 0.3, 0.01));
+
+      // vibrato: LFO rápido cuya velocidad la modula un LFO lento → nunca es perfectamente regular
+      const vibratoLFO = ctx.createOscillator();
+      vibratoLFO.type = 'sine';
+      vibratoLFO.frequency.value = randRange(p.vibratoRateMin, p.vibratoRateMax);
+      const vibratoLFOLento = ctx.createOscillator();
+      vibratoLFOLento.type = 'sine';
+      vibratoLFOLento.frequency.value = randRange(0.04, 0.15);
+      const modRate = ctx.createGain();
+      modRate.gain.value = Math.max((p.vibratoRateMax - p.vibratoRateMin) / 2, 0.01);
+      vibratoLFOLento.connect(modRate); modRate.connect(vibratoLFO.frequency);
+      const gainVibrato = ctx.createGain();
+      gainVibrato.gain.value = p.vibratoDepth;
+      vibratoLFO.connect(gainVibrato); gainVibrato.connect(osc.frequency);
+
+      // micro variaciones de amplitud (trémolo sutil)
+      const microLFO = ctx.createOscillator();
+      microLFO.type = 'sine';
+      microLFO.frequency.value = randRange(0.3, 0.9);
+      const microGain = ctx.createGain();
+      microGain.gain.value = p.microAmp;
+      microLFO.connect(microGain); microGain.connect(gainPrincipal.gain);
+
+      osc.connect(filtro); filtro.connect(gainPrincipal); gainPrincipal.connect(out);
+      osc.start(t); vibratoLFO.start(t); vibratoLFOLento.start(t); microLFO.start(t);
+      nodos = { osc, filtro, gainPrincipal, vibratoLFO, vibratoLFOLento, microLFO };
+    },
+    setFreq(freq) {
+      if (!nodos) return;
+      const t = ctx.currentTime;
+      nodos.osc.frequency.setTargetAtTime(freq, t, 0.15);
+      nodos.filtro.frequency.setTargetAtTime(freq * 6, t, 0.15);
+    },
+    stop() {
+      if (!nodos) return;
+      const t = ctx.currentTime;
+      nodos.gainPrincipal.gain.setTargetAtTime(0, t, 0.1);
+      const n = nodos;
+      setTimeout(() => {
+        [n.osc, n.vibratoLFO, n.vibratoLFOLento, n.microLFO].forEach(o => { try { o.stop(); } catch (e) {} });
+      }, 400);
+      nodos = null;
+    },
+  };
+}
+
+// ── Motor: toggle de ruido blanco (Celular 2 / FAST) ─────────────
+function crearMotorToggleRuido(ctx, out, ruido) {
+  let activo = false, src = null, gainNode = null;
+  return {
+    toggle() {
+      const p = PARAMS.c2.fast;
+      const t = ctx.currentTime;
+      activo = !activo;
+      if (activo) {
+        src = ctx.createBufferSource();
+        src.buffer = ruido; src.loop = true;
+        gainNode = ctx.createGain();
+        gainNode.gain.setValueAtTime(0, t);
+        gainNode.gain.linearRampToValueAtTime(p.volumen, t + Math.max(p.fadeIn, 0.001));
+        src.connect(gainNode); gainNode.connect(out);
+        src.start(t);
+      } else if (gainNode) {
+        gainNode.gain.setValueAtTime(gainNode.gain.value, t);
+        gainNode.gain.linearRampToValueAtTime(0, t + Math.max(p.fadeOut, 0.001));
+        const s = src;
+        setTimeout(() => { try { s.stop(); } catch (e) {} }, p.fadeOut * 1000 + 50);
+      }
+    },
+  };
+}
+
+// ── Motor: glitch agresivo (Celular 2 / SLOW — ref. AV3RY) ───────
+function crearMotorGlitch(ctx, out, ruido, curva) {
+  let activo = false, timeoutId = null;
+  function programarEvento() {
+    if (!activo) return;
+    const p = PARAMS.c2.glitch;
+    const t = ctx.currentTime;
+    const dur = randRange(p.burstMin, p.burstMax);
+    const src = ctx.createBufferSource();
+    src.buffer = ruido;
+    src.playbackRate.value = randRange(0.5, 4);
+    const offset = Math.max(Math.random() * (ruido.duration - dur - 0.02), 0);
+    const waveshaper = ctx.createWaveShaper();
+    waveshaper.curve = curva;
+    waveshaper.oversample = '2x';
+    const env = ctx.createGain();
+    if (Math.random() < p.probCorte) {
+      env.gain.setValueAtTime(randRange(0.3, 1), t);
+      env.gain.setValueAtTime(0, t + dur * randRange(0.3, 0.7));
+    } else {
+      env.gain.setValueAtTime(0, t);
+      env.gain.linearRampToValueAtTime(randRange(0.3, 1), t + 0.002);
+      env.gain.linearRampToValueAtTime(0, t + dur);
+    }
+    src.connect(waveshaper); waveshaper.connect(env); env.connect(out);
+    src.start(t, offset, dur);
+    const densidad = randRange(p.densityMin, p.densityMax);
+    const intervalo = (1000 / densidad) * randRange(0.3, 1.7);
+    timeoutId = setTimeout(programarEvento, Math.max(intervalo, 5));
+  }
+  return {
+    start() { if (activo) return; activo = true; programarEvento(); },
+    stop() { activo = false; clearTimeout(timeoutId); },
+  };
+}
+
+// ── Motor: alternancia La2/Do3 (Celular 2 / STILL) ───────────────
+function crearMotorAlternancia(ctx, out, motorTono) {
+  let activo = false, timeoutId = null, freqActual;
+  function programarCambio() {
+    if (!activo) return;
+    const p = PARAMS.c2.still;
+    freqActual = freqActual === p.freqA ? p.freqC : p.freqA;
+    motorTono.setFreq(freqActual);
+    const dur = randRange(p.durMin, p.durMax) * 1000;
+    timeoutId = setTimeout(programarCambio, dur);
+  }
+  return {
+    start() {
+      if (activo) return;
+      activo = true;
+      const p = PARAMS.c2.still;
+      freqActual = p.freqA;
+      motorTono.start(freqActual, () => p);
+      programarCambio();
+    },
+    stop() { activo = false; clearTimeout(timeoutId); motorTono.stop(); },
+  };
+}
+
+// ── VoiceAudio: liga rol + estado a los motores, y aplica mute ───
+class VoiceAudio {
+  constructor(ctx, master, ruido, curva) {
+    this.ctx = ctx;
+    this.gainMute = ctx.createGain();
+    this.gainMute.gain.value = 1;
+    this.gainMute.connect(master);
+    this.role = null;
+    this.modo = null;
+    this.muteUntil = 0;
+    this.muteTimeoutId = null;
+
+    this.percusion = crearMotorPercusion(ctx, this.gainMute, ruido);
+    this.granular = crearMotorGranular(ctx, this.gainMute, ruido);
+    this.tonoC1 = crearMotorTono(ctx, this.gainMute);
+    this.tonoC2 = crearMotorTono(ctx, this.gainMute);
+    this.toggleRuido = crearMotorToggleRuido(ctx, this.gainMute, ruido);
+    this.glitch = crearMotorGlitch(ctx, this.gainMute, ruido, curva);
+    this.alternancia = crearMotorAlternancia(ctx, this.gainMute, this.tonoC2);
+  }
+  setRole(role) {
+    if (this.role === role) return;
+    this._detenerModo();
+    this.role = role;
+  }
+  _detenerModo() {
+    if (this.modo === 'SLOW') {
+      if (this.role === 'c1') this.granular.stop();
+      if (this.role === 'c2') this.glitch.stop();
+    } else if (this.modo === 'STILL') {
+      if (this.role === 'c1') this.tonoC1.stop();
+      if (this.role === 'c2') this.alternancia.stop();
+    }
+    this.modo = null;
+  }
+  setEstado(state) {
+    if (!this.role || state === this.modo) return;
+    this._detenerModo();
+    this.modo = state;
+    if (state === 'SLOW') {
+      if (this.role === 'c1') this.granular.start();
+      if (this.role === 'c2') this.glitch.start();
+    } else if (state === 'STILL') {
+      if (this.role === 'c1') this.tonoC1.start(PARAMS.c1.still.freq, () => PARAMS.c1.still);
+      if (this.role === 'c2') this.alternancia.start();
+    }
+  }
+  triggerFast() {
+    if (this.role === 'c1') this.percusion.trigger();
+    if (this.role === 'c2') this.toggleRuido.toggle();
+  }
+  aplicarMute({ duration }) {
+    const t = this.ctx.currentTime;
+    const fin = performance.now() + duration;
+    this.muteUntil = Math.max(this.muteUntil, fin);
+    this.gainMute.gain.cancelScheduledValues(t);
+    this.gainMute.gain.setTargetAtTime(0, t, 0.01);
+    clearTimeout(this.muteTimeoutId);
+    const restante = Math.max(this.muteUntil - performance.now(), 0);
+    this.muteTimeoutId = setTimeout(() => {
+      const t2 = this.ctx.currentTime;
+      this.gainMute.gain.setTargetAtTime(1, t2, 0.05);
+    }, restante);
+  }
+  desconectar() {
+    this._detenerModo();
+    clearTimeout(this.muteTimeoutId);
+    this.gainMute.disconnect();
+  }
+}
+
+// ── Estado global: audio, voces, roles ───────────────────────────
+let audioCtx = null, masterGainNode = null, ruidoBuffer = null, curvaDistorsion = null;
 let masterVol = 0.7;
+const voces = new Map(); // id → { audio: VoiceAudio|null, role, state, faceUp, faceUpElapsed }
+const roles = { c1: null, c2: null };
 
-// ── Voces FM: Map id → { carrier, modulator, modGain, gainNode, params }
-const voces = new Map();
+function asignarRolAutomatico(id) {
+  if (!roles.c1) { roles.c1 = id; return 'c1'; }
+  if (!roles.c2) { roles.c2 = id; return 'c2'; }
+  return null;
+}
+function reasignarManual(id, rolNuevo) {
+  const prevOwner = roles[rolNuevo];
+  if (prevOwner && prevOwner !== id && voces.has(prevOwner)) {
+    voces.get(prevOwner).role = null;
+    if (voces.get(prevOwner).audio) voces.get(prevOwner).audio.setRole(null);
+  }
+  Object.keys(roles).forEach(r => { if (roles[r] === id) roles[r] = null; });
+  roles[rolNuevo] = id;
+  const v = voces.get(id);
+  if (v) {
+    v.role = rolNuevo;
+    if (v.audio) v.audio.setRole(rolNuevo);
+  }
+  renderVoces();
+}
+
+function crearVozInfo(id) {
+  if (voces.has(id)) return;
+  const rol = asignarRolAutomatico(id);
+  const info = { audio: null, role: rol, state: null, faceUp: false, faceUpElapsed: 0 };
+  voces.set(id, info);
+  if (audioCtx) activarAudioDeVoz(id);
+}
+function activarAudioDeVoz(id) {
+  const info = voces.get(id);
+  if (!info || info.audio) return;
+  info.audio = new VoiceAudio(audioCtx, masterGainNode, ruidoBuffer, curvaDistorsion);
+  info.audio.setRole(info.role);
+}
+function eliminarVoz(id) {
+  const info = voces.get(id);
+  if (!info) return;
+  if (info.audio) info.audio.desconectar();
+  Object.keys(roles).forEach(r => { if (roles[r] === id) roles[r] = null; });
+  voces.delete(id);
+}
 
 // ── WebSocket ─────────────────────────────────────────────────────
+const WS_URL = (() => {
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  const host = location.hostname === "localhost" ? "localhost:3000" : "servidor-de-celuido.onrender.com";
+  return `${proto}//${host}`;
+})();
 let ws;
-
 function conectarWS() {
   ws = new WebSocket(WS_URL);
   const statusEl = document.getElementById("ws-status");
-
   ws.onopen = () => {
     ws.send(JSON.stringify({ type: "register", role: "maestro" }));
-    statusEl.textContent = "conectado";
-    statusEl.className = "ok";
+    statusEl.textContent = "conectado"; statusEl.className = "ok";
   };
-
   ws.onmessage = (evt) => {
     const msg = JSON.parse(evt.data);
-
     if (msg.type === "state") {
-      // Estado inicial: crear voces para controladores ya conectados
-      msg.voices.forEach(id => crearVoz(id));
-      actualizarContador(msg.voiceCount);
-    }
-    else if (msg.type === "connect") {
-      crearVoz(msg.id);
-      actualizarContador(msg.voiceCount);
+      msg.voices.forEach(id => crearVozInfo(id));
       renderVoces();
-    }
-    else if (msg.type === "disconnect") {
+    } else if (msg.type === "connect") {
+      crearVozInfo(msg.id);
+      renderVoces();
+    } else if (msg.type === "disconnect") {
       eliminarVoz(msg.id);
-      actualizarContador(msg.voiceCount);
       renderVoces();
-    }
-    else if (msg.type === "control") {
-      recibirControl(msg);
+    } else if (msg.type === "control") {
+      manejarControl(msg);
     }
   };
-
   ws.onclose = () => {
-    statusEl.textContent = "desconectado — reintentando…";
-    statusEl.className = "error";
+    statusEl.textContent = "desconectado — reintentando…"; statusEl.className = "error";
     setTimeout(conectarWS, 2000);
   };
-
   ws.onerror = () => ws.close();
 }
-
-// ── Síntesis FM ───────────────────────────────────────────────────
-/*
-  Arquitectura por voz:
-  
-  [modulador OSC] → [modGain] → frecuencia de [portadora OSC]
-                                    ↓
-                               [ampGain] → [masterGain] → destination
-  
-  Parámetros de control:
-  - ratio       → frecuencia del modulador = fundamental * ratio
-  - modIndex    → ganancia del modulador (índice de modulación) = modIndex * freq_portadora
-  - amp         → ganancia de amplitud de la voz
-*/
-
-function crearVoz(id) {
-  if (!audioCtx || voces.has(id)) return;
-
-  const carrier = audioCtx.createOscillator();
-  const modulator = audioCtx.createOscillator();
-  const modGain = audioCtx.createGain();
-  const ampGain = audioCtx.createGain();
-
-  carrier.type = "sine";
-  modulator.type = "sine";
-
-  carrier.frequency.value = fundamental;
-  modulator.frequency.value = fundamental; // ratio 1:1 inicial
-  modGain.gain.value = 0;                  // índice de mod. inicial = 0
-  ampGain.gain.value = 0;
-
-  // Conexiones FM
-  modulator.connect(modGain);
-  modGain.connect(carrier.frequency); // FM: modulador → frecuencia de portadora
-  carrier.connect(ampGain);
-  ampGain.connect(masterGainNode);
-
-  modulator.start();
-  carrier.start();
-
-  voces.set(id, {
-    carrier, modulator, modGain, ampGain,
-    params: { ratio: 1, modIndex: 0, amp: 0, beta: 0, gamma: 0 }
-  });
-
-  renderVoces();
-}
-
-function eliminarVoz(id) {
-  if (!voces.has(id)) return;
-  const v = voces.get(id);
-  const t = audioCtx ? audioCtx.currentTime : 0;
-
-  // Fade out antes de desconectar
-  v.ampGain.gain.setTargetAtTime(0, t, 0.05);
-  setTimeout(() => {
-    try {
-      v.carrier.stop();
-      v.modulator.stop();
-    } catch(e) {}
-    v.carrier.disconnect();
-    v.modulator.disconnect();
-    v.modGain.disconnect();
-    v.ampGain.disconnect();
-  }, 300);
-
-  voces.delete(id);
-  renderVoces();
-}
-
-function recibirControl(msg) {
-  const v = voces.get(msg.id);
-  if (!v || !audioCtx) return;
-
-  const t = audioCtx.currentTime;
-  const { ratio, modIndex, amp } = msg;
-
-  // Frecuencia portadora = fundamental (fija)
-  v.carrier.frequency.setTargetAtTime(fundamental, t, 0.05);
-
-  // Frecuencia moduladora = fundamental * ratio
-  const fMod = fundamental * ratio;
-  v.modulator.frequency.setTargetAtTime(fMod, t, 0.05);
-
-  // Índice de modulación → ganancia del modulador (escala sobre la freq. portadora)
-  const modGainVal = modIndex * fundamental * 0.5;
-  v.modGain.gain.setTargetAtTime(modGainVal, t, 0.05);
-
-  // Amplitud de voz (con atenuación por nº de voces para evitar clipping)
-  const vocesCont = Math.max(1, voces.size);
-  const ampScaled = amp / Math.sqrt(vocesCont);
-  v.ampGain.gain.setTargetAtTime(ampScaled, t, 0.03);
-
-  // Actualizar params locales para UI
-  v.params = { ratio, modIndex, amp, beta: msg.beta, gamma: msg.gamma };
-
-  // Actualizar card
+function manejarControl(msg) {
+  const info = voces.get(msg.id);
+  if (!info) return;
+  if (msg.kind === "state") {
+    info.state = msg.state;
+    info.faceUp = msg.faceUp;
+    info.faceUpElapsed = msg.faceUpElapsed;
+    if (info.audio) info.audio.setEstado(msg.state);
+  } else if (msg.kind === "event" && msg.event === "FAST") {
+    if (info.audio) info.audio.triggerFast();
+  } else if (msg.kind === "mute") {
+    if (info.audio) info.audio.aplicarMute(msg);
+  }
   actualizarCard(msg.id);
 }
 
-function actualizarFundamental(f) {
-  fundamental = f;
-  if (!audioCtx) return;
-  const t = audioCtx.currentTime;
-  voces.forEach(v => {
-    v.carrier.frequency.setTargetAtTime(f, t, 0.05);
-    v.modulator.frequency.setTargetAtTime(f * v.params.ratio, t, 0.05);
+// ── UI: lista de voces ────────────────────────────────────────────
+function renderVoces() {
+  const cont = document.getElementById("lista-voces");
+  cont.innerHTML = "";
+  if (voces.size === 0) {
+    cont.innerHTML = `<div style="font-size:0.65rem;opacity:0.3">sin controladores</div>`;
+    return;
+  }
+  voces.forEach((info, id) => {
+    const card = document.createElement("div");
+    card.className = "voz-card";
+    card.id = `card-${id}`;
+    card.innerHTML = `
+      <div class="voz-nombre">${id}</div>
+      <div class="voz-linea">estado <span id="${id}-estado">—</span></div>
+      <div class="voz-linea">face up <span id="${id}-faceup">—</span></div>
+      <div class="voz-roles">
+        <button data-id="${id}" data-rol="c1" class="${info.role === 'c1' ? 'activo' : ''}">Celular 1</button>
+        <button data-id="${id}" data-rol="c2" class="${info.role === 'c2' ? 'activo' : ''}">Celular 2</button>
+      </div>`;
+    cont.appendChild(card);
+  });
+  cont.querySelectorAll("button[data-rol]").forEach(btn => {
+    btn.addEventListener("click", () => reasignarManual(btn.dataset.id, btn.dataset.rol));
+  });
+}
+function actualizarCard(id) {
+  const info = voces.get(id);
+  if (!info) return;
+  const setTxt = (sel, val) => { const el = document.getElementById(sel); if (el) el.textContent = val; };
+  setTxt(`${id}-estado`, info.state || "—");
+  setTxt(`${id}-faceup`, info.faceUp ? (info.faceUpElapsed / 1000).toFixed(1) + "s" : "—");
+  const card = document.getElementById(`card-${id}`);
+  if (card) card.classList.toggle("muted", info.audio && info.audio.muteUntil > performance.now());
+}
+setInterval(() => voces.forEach((_, id) => actualizarCard(id)), 300);
+
+// ── UI: panel de parámetros (generado desde PARAMS) ──────────────
+function inferirRango(key, val) {
+  if (/prob|irregularidad|fadeIn|fadeOut|microAmp|volumen/i.test(key)) return { min: 0, max: 1, step: 0.01 };
+  if (/freq/i.test(key)) return { min: 20, max: 1000, step: 0.01 };
+  if (/filter/i.test(key)) return { min: 20, max: 8000, step: 1 };
+  if (/density/i.test(key)) return { min: 1, max: 60, step: 1 };
+  if (/vibratoRate/i.test(key)) return { min: 0.5, max: 12, step: 0.1 };
+  if (/vibratoDepth/i.test(key)) return { min: 0, max: 30, step: 0.5 };
+  if (/dur|attack|decay|burst|grain/i.test(key)) return { min: 0, max: Math.max(val * 4, 0.5), step: 0.001 };
+  if (/distorsion/i.test(key)) return { min: 0, max: 100, step: 1 };
+  return { min: 0, max: Math.max(val * 3, 1), step: val < 1 ? 0.01 : 1 };
+}
+function crearPanelParams(container, obj, path = []) {
+  Object.entries(obj).forEach(([key, val]) => {
+    if (typeof val === "object") {
+      const grupo = document.createElement("div");
+      grupo.className = "grupo-params";
+      const titulo = document.createElement("div");
+      titulo.className = "grupo-titulo";
+      titulo.textContent = path.concat(key).join(" / ");
+      grupo.appendChild(titulo);
+      container.appendChild(grupo);
+      crearPanelParams(grupo, val, path.concat(key));
+    } else if (typeof val === "number") {
+      const { min, max, step } = inferirRango(key, val);
+      const row = document.createElement("label");
+      row.className = "param-row";
+      const label = document.createElement("span"); label.textContent = key;
+      const input = document.createElement("input");
+      input.type = "range"; input.min = min; input.max = max; input.step = step; input.value = val;
+      const valSpan = document.createElement("span"); valSpan.textContent = val;
+      input.addEventListener("input", (e) => {
+        const v = parseFloat(e.target.value);
+        setDeep(PARAMS, path.concat(key), v);
+        valSpan.textContent = v;
+      });
+      row.append(label, input, valSpan);
+      container.appendChild(row);
+    }
   });
 }
 
-// ── Audio Context ─────────────────────────────────────────────────
+// ── Audio context / controles maestros ───────────────────────────
 document.getElementById("btn-iniciar").addEventListener("click", () => {
-  if (audioActivo) return;
-
+  if (audioCtx) return;
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   masterGainNode = audioCtx.createGain();
   masterGainNode.gain.value = masterVol;
   masterGainNode.connect(audioCtx.destination);
-
-  audioActivo = true;
+  ruidoBuffer = crearBufferRuido(audioCtx, 2);
+  curvaDistorsion = crearCurvaDistorsion(PARAMS.c2.glitch.distorsion);
   document.getElementById("btn-iniciar").disabled = true;
   document.getElementById("btn-iniciar").textContent = "audio activo";
-
-  // Crear voces para controladores ya conectados
-  voces.forEach((_, id) => {}); // voces ya creadas si msg llegó antes
-  // Re-crear voces que llegaron antes del audioCtx
-  ws && ws.readyState === WebSocket.OPEN &&
-    ws.send(JSON.stringify({ type: "register", role: "maestro" }));
+  voces.forEach((_, id) => activarAudioDeVoz(id));
 });
-
-// ── Controles UI ──────────────────────────────────────────────────
-document.getElementById("ctrl-fundamental").addEventListener("input", (e) => {
-  fundamental = parseFloat(e.target.value);
-  document.getElementById("val-fundamental").textContent = `${fundamental} Hz`;
-  actualizarFundamental(fundamental);
-});
-
 document.getElementById("ctrl-master").addEventListener("input", (e) => {
   masterVol = parseFloat(e.target.value);
   document.getElementById("val-master").textContent = masterVol.toFixed(2);
   if (masterGainNode) masterGainNode.gain.setTargetAtTime(masterVol, audioCtx.currentTime, 0.05);
 });
 
-// ── UI voces ──────────────────────────────────────────────────────
-function renderVoces() {
-  const container = document.getElementById("lista-voces");
-  container.innerHTML = "";
-
-  if (voces.size === 0) {
-    container.innerHTML = `<div style="font-size:0.65rem;opacity:0.25;letter-spacing:0.1em">sin controladores</div>`;
-    return;
-  }
-
-  voces.forEach((v, id) => {
-    const card = document.createElement("div");
-    card.className = "voz-card";
-    card.id = `card-${id}`;
-    card.innerHTML = `
-      <div class="voz-nombre">${id}</div>
-      <div class="voz-param">ratio <span id="${id}-ratio">—</span></div>
-      <div class="voz-param">mod.idx <span id="${id}-mod">—</span></div>
-      <div class="voz-param">amp <span id="${id}-amp">—</span></div>
-      <div class="voz-param">β <span id="${id}-beta">—</span></div>
-    `;
-    container.appendChild(card);
-  });
-}
-
-function actualizarCard(id) {
-  const v = voces.get(id);
-  if (!v) return;
-  const p = v.params;
-
-  const setTxt = (sel, val) => {
-    const el = document.getElementById(sel);
-    if (el) el.textContent = val;
-  };
-
-  setTxt(`${id}-ratio`, p.ratio.toFixed(1));
-  setTxt(`${id}-mod`, p.modIndex.toFixed(1));
-  setTxt(`${id}-amp`, p.amp.toFixed(2));
-  setTxt(`${id}-beta`, p.beta !== undefined ? p.beta.toFixed(0) + "°" : "—");
-
-  const card = document.getElementById(`card-${id}`);
-  if (card) {
-    card.classList.toggle("activa", p.amp > 0.05);
-  }
-}
-
-function actualizarContador(n) {
-  document.querySelector("#voz-count strong").textContent = n;
-}
-
-// ── Visualizador FM (osciloscopio Lissajous aproximado) ───────────
-const canvas = document.getElementById("fm-canvas");
-const ctx2d = canvas.getContext("2d");
-
-function resizeCanvas() {
-  const wrapper = document.getElementById("canvas-wrapper");
-  canvas.width = wrapper.clientWidth;
-  canvas.height = wrapper.clientHeight;
-}
-
-window.addEventListener("resize", resizeCanvas);
-resizeCanvas();
-
-let vizPhase = 0;
-
-function drawFM() {
-  requestAnimationFrame(drawFM);
-
-  const W = canvas.width, H = canvas.height;
-  const CX = W / 2, CY = H / 2;
-
-  // Trail
-  ctx2d.fillStyle = "rgba(5,5,8,0.12)";
-  ctx2d.fillRect(0, 0, W, H);
-
-  if (!audioActivo || voces.size === 0) {
-    // Estado inactivo — círculo latente
-    ctx2d.beginPath();
-    ctx2d.arc(CX, CY, 2, 0, Math.PI * 2);
-    ctx2d.fillStyle = "rgba(0,255,136,0.2)";
-    ctx2d.fill();
-    return;
-  }
-
-  vizPhase += 0.015;
-
-  // Dibujar figura de Lissajous combinando todas las voces activas
-  let vocesArr = Array.from(voces.values()).filter(v => v.params.amp > 0.01);
-  if (vocesArr.length === 0) return;
-
-  const POINTS = 512;
-  const RADIUS = Math.min(W, H) * 0.4;
-
-  ctx2d.beginPath();
-
-  for (let i = 0; i <= POINTS; i++) {
-    const t = (i / POINTS) * Math.PI * 2;
-    let x = 0, y = 0;
-    let totalAmp = 0;
-
-    vocesArr.forEach((v, vi) => {
-      const { ratio, modIndex, amp } = v.params;
-      const fm = modIndex * 0.15; // escala visual del índice
-      const phase = vizPhase + vi * (Math.PI * 2 / vocesArr.length);
-
-      // Síntesis FM visual: x e y con modulación de fase
-      x += amp * Math.sin(t + fm * Math.sin(ratio * t + phase));
-      y += amp * Math.cos(t * ratio + fm * Math.cos(t + phase));
-      totalAmp += amp;
-    });
-
-    const scale = RADIUS / Math.max(vocesArr.length, 1);
-    const px = CX + x * scale;
-    const py = CY + y * scale;
-
-    if (i === 0) ctx2d.moveTo(px, py);
-    else ctx2d.lineTo(px, py);
-  }
-
-  const avgAmp = vocesArr.reduce((s, v) => s + v.params.amp, 0) / vocesArr.length;
-  ctx2d.strokeStyle = `rgba(0,255,136,${0.3 + avgAmp * 0.6})`;
-  ctx2d.lineWidth = 1 + avgAmp * 1.5;
-  ctx2d.stroke();
-
-  // Puntos de cada voz
-  vocesArr.forEach((v, vi) => {
-    const { ratio, modIndex, amp } = v.params;
-    const angle = vizPhase * ratio + vi * (Math.PI * 2 / vocesArr.length);
-    const r = RADIUS * 0.3 + modIndex * 8;
-    const px = CX + Math.cos(angle) * r;
-    const py = CY + Math.sin(angle) * r;
-
-    ctx2d.beginPath();
-    ctx2d.arc(px, py, 3 + amp * 5, 0, Math.PI * 2);
-    ctx2d.fillStyle = `rgba(0,204,255,${0.5 + amp * 0.5})`;
-    ctx2d.fill();
-  });
-}
-
 // ── Init ──────────────────────────────────────────────────────────
+crearPanelParams(document.getElementById("panel-config"), PARAMS);
 conectarWS();
-drawFM();
+renderVoces();
 </script>
 </body>
 </html>
