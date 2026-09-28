@@ -109,7 +109,7 @@ body {
 #metricas {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+  gap: 0.6rem 1rem;
   width: 100%;
   max-width: 340px;
 }
@@ -166,8 +166,20 @@ body {
   <div id="estado-gesto">—</div>
   <div id="metricas">
     <div class="metrica">
-      <span class="metrica-label">dev. grav.</span>
+      <span class="metrica-label">magnitud</span>
       <span class="metrica-valor" id="m-dev">0.0</span>
+    </div>
+    <div class="metrica">
+      <span class="metrica-label">velocidad</span>
+      <span class="metrica-valor" id="m-vel">0.0</span>
+    </div>
+    <div class="metrica">
+      <span class="metrica-label">vel. angular</span>
+      <span class="metrica-valor" id="m-velang">0.0</span>
+    </div>
+    <div class="metrica">
+      <span class="metrica-label">varianza</span>
+      <span class="metrica-valor" id="m-var">0.0</span>
     </div>
     <div class="metrica">
       <span class="metrica-label">face up</span>
@@ -230,6 +242,15 @@ const CFG = {
 // ── Módulo A: clasificación de gestos ───────────────────────────
 const Gestos = (() => {
   let smoothedDev = 0;
+
+  // telemetría continua adicional (no participa de la clasificación,
+  // solo se calcula y se expone para que el maestro module el sonido)
+  let devRawPrev = null;
+  let velocidadSuavizada = 0;
+  let varianzaSuavizada = 0;
+  let anguloPrevBeta = null, anguloPrevGamma = null, anguloPrevTime = null;
+  let velocidadAngularSuavizada = 0;
+  let stateChangedAt = performance.now();
 
   // estado continuo
   let currentState = null; // 'STILL' | 'SLOW' | null
@@ -343,13 +364,47 @@ const Gestos = (() => {
 
       smoothedDev += CFG.SMOOTH_ALPHA * (devRaw - smoothedDev);
 
+      // velocidad: derivada de la desviación cruda (qué tan rápido cambia el movimiento)
+      if (devRawPrev !== null) {
+        const delta = Math.abs(devRaw - devRawPrev);
+        velocidadSuavizada += CFG.SMOOTH_ALPHA * (delta - velocidadSuavizada);
+      }
+      devRawPrev = devRaw;
+
+      // varianza entre ejes: qué tan repartido/parejo está el movimiento en x,y,z
+      const ax = Math.abs(x), ay = Math.abs(y), az = Math.abs(z);
+      const media = (ax + ay + az) / 3;
+      const varInstant = media > 0.0001
+        ? (Math.abs(ax - media) + Math.abs(ay - media) + Math.abs(az - media)) / (3 * media)
+        : 0;
+      varianzaSuavizada += CFG.SMOOTH_ALPHA * (Math.min(varInstant, 2) - varianzaSuavizada);
+
       updateFastEvent(devRaw, now);
+      const prevState = currentState;
       updateContinuousState(smoothedDev, now);
+      if (currentState !== prevState) stateChangedAt = now;
       updateFaceUp(z, now);
+    },
+
+    // se llama en cada muestra de deviceorientation (solo para velocidad angular)
+    procesarOrientacion(beta, gamma) {
+      const now = performance.now();
+      if (anguloPrevTime !== null) {
+        const dt = Math.max((now - anguloPrevTime) / 1000, 0.001);
+        const dBeta = beta - anguloPrevBeta;
+        const dGamma = gamma - anguloPrevGamma;
+        const vel = Math.sqrt(dBeta * dBeta + dGamma * dGamma) / dt; // grados/seg
+        velocidadAngularSuavizada += CFG.SMOOTH_ALPHA * (vel - velocidadAngularSuavizada);
+      }
+      anguloPrevBeta = beta; anguloPrevGamma = gamma; anguloPrevTime = now;
     },
 
     getState() { return currentState; },
     getSmoothedDev() { return smoothedDev; },
+    getVelocidad() { return velocidadSuavizada; },
+    getVelocidadAngular() { return velocidadAngularSuavizada; },
+    getVarianzaEjes() { return varianzaSuavizada; },
+    getDuracionEstado() { return performance.now() - stateChangedAt; },
     isFaceUp() { return faceUpActive; },
     getFaceUpElapsed: faceUpElapsedMs,
   };
@@ -398,6 +453,12 @@ function enviarEstado() {
     state: Gestos.getState(),
     faceUp: Gestos.isFaceUp(),
     faceUpElapsed: Math.round(Gestos.getFaceUpElapsed()),
+    // telemetría continua para que el maestro module el sonido en vivo
+    magnitud: +Gestos.getSmoothedDev().toFixed(3),
+    velocidad: +Gestos.getVelocidad().toFixed(3),
+    velocidadAngular: +Gestos.getVelocidadAngular().toFixed(2),
+    varianzaEjes: +Gestos.getVarianzaEjes().toFixed(3),
+    duracionEstado: Math.round(Gestos.getDuracionEstado()),
   }));
 }
 
@@ -421,6 +482,10 @@ function iniciarSensores() {
     const a = e.accelerationIncludingGravity;
     if (!a) return;
     Gestos.procesarMuestra(a);
+  });
+  // Solo se usa para derivar velocidad angular; no participa de la clasificación.
+  window.addEventListener("deviceorientation", (e) => {
+    Gestos.procesarOrientacion(e.beta || 0, e.gamma || 0);
   });
 }
 
@@ -485,6 +550,9 @@ function drawViz() {
   }
 
   document.getElementById("m-dev").textContent = dev.toFixed(2);
+  document.getElementById("m-vel").textContent = Gestos.getVelocidad().toFixed(2);
+  document.getElementById("m-velang").textContent = Gestos.getVelocidadAngular().toFixed(1);
+  document.getElementById("m-var").textContent = Gestos.getVarianzaEjes().toFixed(2);
   document.getElementById("m-faceup").textContent = (faceUpElapsed / 1000).toFixed(1) + "s";
 
   if (now - lastSend > 1000 / CFG.SEND_RATE) {
