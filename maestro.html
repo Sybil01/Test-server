@@ -143,7 +143,7 @@ main {
   font-size: 0.65rem; opacity: 0.7;
   padding: 0.15rem 0;
 }
-.param-row span:first-child { width: 110px; flex-shrink: 0; }
+.param-row span:first-child { width: 130px; flex-shrink: 0; }
 .param-row input[type=range] { flex: 1; width: auto; }
 .param-row span:last-child { width: 3.4rem; text-align: right; color: var(--accent); opacity: 1; }
 
@@ -176,27 +176,41 @@ main {
 <script>
 /* ============================================================
    CELUIDO — Maestro (maestro.html)
+   ------------------------------------------------------------
    Recibe { kind: 'state'|'event'|'mute', ... } por celular y
-   mapea a motores de síntesis según el ROL asignado a esa voz
-   (c1 / c2). La clasificación de gestos NO vive acá — solo el
-   mapeo gesto → sonido.
+   mapea a motores de síntesis según el ROL asignado (c1/c2).
+   La clasificación de gestos NO vive acá — solo el mapeo y
+   procesamiento de audio.
+
+   Reglas de esta versión:
+   - FAST = evento puntual, duración independiente, nunca crea
+     una capa permanente (percusión en C1, toggle en C2).
+   - SLOW / STILL = estados continuos, mutuamente excluyentes
+     por celular, con crossfade al alternar.
+   - STILL ya NO tiene altura tonal en ningún celular: es ruido
+     continuo relativamente estable en los dos casos.
+   - Todos los motores continuos leen telemetría en vivo
+     (magnitud, velocidad, velocidadAngular, varianzaEjes,
+     duracionEstado) para modular sus parámetros.
    ============================================================ */
 
 // ── PARAMS: todo lo que el panel de la derecha permite ajustar ──
 const PARAMS = {
   c1: {
-    perc:  { attack: 0.002, decay: 0.07, filterMin: 800, filterMax: 3000 },
-    gran:  { grainMin: 0.01, grainMax: 0.12, densityMin: 5, densityMax: 40,
-             filterMin: 300, filterMax: 6000, irregularidad: 0.7 },
-    still: { freq: 164.81, attack: 0.6, vibratoRateMin: 4, vibratoRateMax: 6.5,
-             vibratoDepth: 6, microAmp: 0.04 },
+    fast: { durMin: 20, durMax: 150, velRefDuracion: 8, brilloPorVelocidad: 1.5,
+            filterBase: 1200, amplitudPorMagnitud: 0.08 },
+    gran: { grainMin: 0.008, grainMax: 0.05, densityMin: 8, densityMax: 45,
+            filterMin: 400, filterMax: 7000, densidadPorVelocidad: 0.05,
+            brilloPorVelAngular: 1.2, nivelPorMagnitud: 0.06 },
+    still: { filterBase: 900, q: 2.5, nivel: 0.35, lfoRate: 0.15, lfoDepth: 120,
+             microRate: 0.6, microAmp: 0.03, brilloPorVelAngular: 0.6 },
   },
   c2: {
-    fast:   { fadeIn: 0.015, fadeOut: 0.05, volumen: 0.4 },
-    glitch: { densityMin: 8, densityMax: 35, probCorte: 0.3,
-              burstMin: 0.02, burstMax: 0.25, distorsion: 40 },
-    still:  { freqA: 110.00, freqC: 130.81, durMin: 1.5, durMax: 6,
-              vibratoRateMin: 4, vibratoRateMax: 6.5, vibratoDepth: 6, microAmp: 0.04 },
+    fast:   { fadeIn: 0.015, fadeOut: 0.05, volumen: 0.4, filtroFrecuencia: 6000, saturacion: 0 },
+    glitch: { densityMin: 6, densityMax: 40, probCorte: 0.35, burstMin: 0.015,
+              burstMax: 0.2, distorsion: 45 },
+    still:  { filterBase: 700, q: 2, nivel: 0.3, lfoRate: 0.1, lfoDepth: 90,
+              microRate: 0.5, microAmp: 0.025, brilloPorVelAngular: 0.5 },
   },
 };
 
@@ -225,128 +239,161 @@ function crearCurvaDistorsion(cantidad = 40) {
   return curve;
 }
 
-// ── Motor: percusión (Celular 1 / FAST) ──────────────────────────
+// ── Motor: impulso de ruido puntual (Celular 1 / FAST) ───────────
+// Evento único, duración independiente del estado continuo activo.
 function crearMotorPercusion(ctx, out, ruido) {
   return {
-    trigger() {
-      const p = PARAMS.c1.perc;
+    trigger(tel = {}) {
+      const p = PARAMS.c1.fast;
       const t = ctx.currentTime;
+      const magnitud = tel.magnitud || 0;
+      const velRel = Math.min((tel.velocidad || 0) / p.velRefDuracion, 1);
+
+      // más velocidad de gesto → impulso más corto y más agudo
+      const durMs = p.durMax - velRel * (p.durMax - p.durMin);
+      const dur = Math.max(Math.min(durMs, p.durMax), p.durMin) / 1000;
+
       const src = ctx.createBufferSource();
       src.buffer = ruido;
+      src.playbackRate.value = 1 + velRel * p.brilloPorVelocidad;
+
       const filtro = ctx.createBiquadFilter();
       filtro.type = 'bandpass';
-      filtro.frequency.value = randRange(p.filterMin, p.filterMax);
-      filtro.Q.value = randRange(2, 8);
+      filtro.frequency.value = p.filterBase * (1 + velRel * 1.5);
+      filtro.Q.value = randRange(1, 4);
+
       const env = ctx.createGain();
-      env.gain.setValueAtTime(0, t);
-      env.gain.linearRampToValueAtTime(1, t + Math.max(p.attack, 0.001));
-      env.gain.exponentialRampToValueAtTime(0.0001, t + p.attack + Math.max(p.decay, 0.01));
+      const amp = Math.min(0.3 + magnitud * p.amplitudPorMagnitud, 1);
+      // attack inmediato, máxima energía inicial, corte abrupto + cola corta
+      env.gain.setValueAtTime(amp, t);
+      env.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+
       src.connect(filtro); filtro.connect(env); env.connect(out);
       src.start(t);
-      src.stop(t + p.attack + p.decay + 0.05);
+      src.stop(t + dur + 0.02);
     },
   };
 }
 
 // ── Motor: granular (Celular 1 / SLOW — ref. Vaggione) ───────────
-function crearMotorGranular(ctx, out, ruido) {
+// Instancia efímera: se crea al entrar en SLOW, se destruye al salir.
+function crearMotorGranular(ctx, ruido, getTel, getParams) {
+  const fadeGain = ctx.createGain();
+  fadeGain.gain.value = 0;
   let activo = false, timeoutId = null;
+
   function programarGrano() {
     if (!activo) return;
-    const p = PARAMS.c1.gran;
+    const p = getParams();
+    const tel = getTel() || {};
     const t = ctx.currentTime;
+    const irregularidad = Math.min(0.3 + (tel.varianzaEjes || 0), 1.5);
+
     const dur = randRange(p.grainMin, p.grainMax);
     const src = ctx.createBufferSource();
     src.buffer = ruido;
     src.playbackRate.value = randRange(0.5, 2.5) * (Math.random() < 0.5 ? 1 : -1);
     const offset = Math.max(Math.random() * (ruido.duration - dur - 0.02), 0);
+
     const filtro = ctx.createBiquadFilter();
     filtro.type = Math.random() < 0.5 ? 'bandpass' : 'highpass';
-    filtro.frequency.value = randRange(p.filterMin, p.filterMax);
+    const centro = p.filterMin + Math.random() * (p.filterMax - p.filterMin);
+    const brillo = 1 + Math.min((tel.velocidadAngular || 0) / 60, 1) * p.brilloPorVelAngular;
+    filtro.frequency.value = centro * brillo;
     filtro.Q.value = randRange(0.5, 6);
+
     const env = ctx.createGain();
-    const amp = randRange(0.15, 0.9) * (1 - p.irregularidad * 0.5 + Math.random() * p.irregularidad);
+    const nivelBase = Math.min(0.15 + (tel.magnitud || 0) * p.nivelPorMagnitud, 1);
+    const amp = randRange(0.15, 1) * nivelBase * (1 - irregularidad * 0.3 + Math.random() * irregularidad * 0.3);
     env.gain.setValueAtTime(0, t);
     env.gain.linearRampToValueAtTime(Math.max(amp, 0), t + dur * 0.3);
     env.gain.linearRampToValueAtTime(0, t + dur);
-    src.connect(filtro); filtro.connect(env); env.connect(out);
+
+    src.connect(filtro); filtro.connect(env); env.connect(fadeGain);
     src.start(t, offset, dur);
-    const densidad = randRange(p.densityMin, p.densityMax);
-    const intervalo = (1000 / densidad) * randRange(1 - p.irregularidad * 0.6, 1 + p.irregularidad * 0.6);
-    timeoutId = setTimeout(programarGrano, Math.max(intervalo, 5));
+
+    const densidadBase = p.densityMin + Math.min((tel.velocidad || 0) * p.densidadPorVelocidad, 1) * (p.densityMax - p.densityMin);
+    const intervalo = (1000 / Math.max(densidadBase, 1)) * randRange(1 - irregularidad * 0.4, 1 + irregularidad * 0.6);
+    timeoutId = setTimeout(programarGrano, Math.max(intervalo, 4));
   }
+
   return {
-    start() { if (activo) return; activo = true; programarGrano(); },
-    stop() { activo = false; clearTimeout(timeoutId); },
+    fadeGain,
+    iniciar() { if (activo) return; activo = true; programarGrano(); },
+    detener() { activo = false; clearTimeout(timeoutId); try { fadeGain.disconnect(); } catch (e) {} },
+    actualizarTelemetria() { /* se lee en vivo en cada grano via getTel() */ },
   };
 }
 
-// ── Motor: tono sostenido con vibrato irregular (STILL, C1 y C2) ─
-function crearMotorTono(ctx, out) {
+// ── Motor: ruido estable (STILL — C1 y C2, sin altura tonal) ─────
+function crearMotorRuidoEstable(ctx, ruido, getTel, getParams) {
+  const fadeGain = ctx.createGain();
+  fadeGain.gain.value = 0;
   let nodos = null;
+
   return {
-    start(freq, paramsGetter) {
+    fadeGain,
+    iniciar() {
       if (nodos) return;
-      const p = paramsGetter();
+      const p = getParams();
       const t = ctx.currentTime;
-      const osc = ctx.createOscillator();
-      osc.type = 'sawtooth';
-      osc.frequency.value = freq;
+
+      const src = ctx.createBufferSource();
+      src.buffer = ruido; src.loop = true;
+
       const filtro = ctx.createBiquadFilter();
-      filtro.type = 'lowpass';
-      filtro.frequency.value = freq * 6;
-      filtro.Q.value = 1;
-      const gainPrincipal = ctx.createGain();
-      gainPrincipal.gain.setValueAtTime(0, t);
-      gainPrincipal.gain.linearRampToValueAtTime(0.5, t + Math.max(p.attack || 0.3, 0.01));
+      filtro.type = 'bandpass';
+      filtro.frequency.value = p.filterBase;
+      filtro.Q.value = p.q;
 
-      // vibrato: LFO rápido cuya velocidad la modula un LFO lento → nunca es perfectamente regular
-      const vibratoLFO = ctx.createOscillator();
-      vibratoLFO.type = 'sine';
-      vibratoLFO.frequency.value = randRange(p.vibratoRateMin, p.vibratoRateMax);
-      const vibratoLFOLento = ctx.createOscillator();
-      vibratoLFOLento.type = 'sine';
-      vibratoLFOLento.frequency.value = randRange(0.04, 0.15);
-      const modRate = ctx.createGain();
-      modRate.gain.value = Math.max((p.vibratoRateMax - p.vibratoRateMin) / 2, 0.01);
-      vibratoLFOLento.connect(modRate); modRate.connect(vibratoLFO.frequency);
-      const gainVibrato = ctx.createGain();
-      gainVibrato.gain.value = p.vibratoDepth;
-      vibratoLFO.connect(gainVibrato); gainVibrato.connect(osc.frequency);
+      const nivelGain = ctx.createGain();
+      nivelGain.gain.value = p.nivel;
 
-      // micro variaciones de amplitud (trémolo sutil)
+      // deriva lenta del filtro (fluctuación espectral sutil)
+      const lfoFiltro = ctx.createOscillator();
+      lfoFiltro.type = 'sine';
+      lfoFiltro.frequency.value = p.lfoRate;
+      const lfoFiltroGain = ctx.createGain();
+      lfoFiltroGain.gain.value = p.lfoDepth;
+      lfoFiltro.connect(lfoFiltroGain); lfoFiltroGain.connect(filtro.frequency);
+
+      // micro variación de amplitud
       const microLFO = ctx.createOscillator();
       microLFO.type = 'sine';
-      microLFO.frequency.value = randRange(0.3, 0.9);
+      microLFO.frequency.value = p.microRate;
       const microGain = ctx.createGain();
       microGain.gain.value = p.microAmp;
-      microLFO.connect(microGain); microGain.connect(gainPrincipal.gain);
+      microLFO.connect(microGain); microGain.connect(nivelGain.gain);
 
-      osc.connect(filtro); filtro.connect(gainPrincipal); gainPrincipal.connect(out);
-      osc.start(t); vibratoLFO.start(t); vibratoLFOLento.start(t); microLFO.start(t);
-      nodos = { osc, filtro, gainPrincipal, vibratoLFO, vibratoLFOLento, microLFO };
+      src.connect(filtro); filtro.connect(nivelGain); nivelGain.connect(fadeGain);
+      src.start(t); lfoFiltro.start(t); microLFO.start(t);
+
+      nodos = { src, filtro, nivelGain, lfoFiltro, lfoFiltroGain, microLFO, microGain };
     },
-    setFreq(freq) {
-      if (!nodos) return;
-      const t = ctx.currentTime;
-      nodos.osc.frequency.setTargetAtTime(freq, t, 0.15);
-      nodos.filtro.frequency.setTargetAtTime(freq * 6, t, 0.15);
-    },
-    stop() {
-      if (!nodos) return;
-      const t = ctx.currentTime;
-      nodos.gainPrincipal.gain.setTargetAtTime(0, t, 0.1);
+    detener() {
+      if (!nodos) { try { fadeGain.disconnect(); } catch (e) {} return; }
       const n = nodos;
       setTimeout(() => {
-        [n.osc, n.vibratoLFO, n.vibratoLFOLento, n.microLFO].forEach(o => { try { o.stop(); } catch (e) {} });
-      }, 400);
+        [n.src, n.lfoFiltro, n.microLFO].forEach(o => { try { o.stop(); } catch (e) {} });
+        try { fadeGain.disconnect(); } catch (e) {}
+      }, 50);
       nodos = null;
+    },
+    actualizarTelemetria(tel) {
+      if (!nodos) return;
+      const p = getParams();
+      const t = ctx.currentTime;
+      const brillo = 1 + Math.min((tel.velocidadAngular || 0) / 60, 1) * p.brilloPorVelAngular;
+      nodos.filtro.frequency.setTargetAtTime(p.filterBase * brillo, t, 0.4);
+      nodos.lfoFiltroGain.gain.setTargetAtTime(p.lfoDepth * (0.5 + Math.min(tel.varianzaEjes || 0, 1) * 0.5), t, 0.4);
+      const nivelObjetivo = p.nivel * (0.7 + Math.min((tel.magnitud || 0) / 10, 1) * 0.3);
+      nodos.nivelGain.gain.setTargetAtTime(nivelObjetivo, t, 0.3);
     },
   };
 }
 
 // ── Motor: toggle de ruido blanco (Celular 2 / FAST) ─────────────
-function crearMotorToggleRuido(ctx, out, ruido) {
+function crearMotorToggleRuido(ctx, out, ruido, curva) {
   let activo = false, src = null, gainNode = null;
   return {
     toggle() {
@@ -356,10 +403,23 @@ function crearMotorToggleRuido(ctx, out, ruido) {
       if (activo) {
         src = ctx.createBufferSource();
         src.buffer = ruido; src.loop = true;
+
+        const filtro = ctx.createBiquadFilter();
+        filtro.type = 'lowpass';
+        filtro.frequency.value = p.filtroFrecuencia;
+
+        const drive = ctx.createGain();
+        drive.gain.value = 1 + p.saturacion * 4;
+        const waveshaper = ctx.createWaveShaper();
+        waveshaper.curve = curva;
+        waveshaper.oversample = '2x';
+
         gainNode = ctx.createGain();
         gainNode.gain.setValueAtTime(0, t);
         gainNode.gain.linearRampToValueAtTime(p.volumen, t + Math.max(p.fadeIn, 0.001));
-        src.connect(gainNode); gainNode.connect(out);
+
+        src.connect(filtro); filtro.connect(drive); drive.connect(waveshaper);
+        waveshaper.connect(gainNode); gainNode.connect(out);
         src.start(t);
       } else if (gainNode) {
         gainNode.gain.setValueAtTime(gainNode.gain.value, t);
@@ -372,116 +432,148 @@ function crearMotorToggleRuido(ctx, out, ruido) {
 }
 
 // ── Motor: glitch agresivo (Celular 2 / SLOW — ref. AV3RY) ───────
-function crearMotorGlitch(ctx, out, ruido, curva) {
+function crearMotorGlitch(ctx, ruido, curva, getTel, getParams) {
+  const fadeGain = ctx.createGain();
+  fadeGain.gain.value = 0;
   let activo = false, timeoutId = null;
+
   function programarEvento() {
     if (!activo) return;
-    const p = PARAMS.c2.glitch;
+    const p = getParams();
+    const tel = getTel() || {};
     const t = ctx.currentTime;
+    const inestabilidad = Math.min(0.3 + (tel.varianzaEjes || 0), 1.5);
+
     const dur = randRange(p.burstMin, p.burstMax);
     const src = ctx.createBufferSource();
     src.buffer = ruido;
-    src.playbackRate.value = randRange(0.5, 4);
+    src.playbackRate.value = randRange(0.4, 4.5);
     const offset = Math.max(Math.random() * (ruido.duration - dur - 0.02), 0);
+
+    const filtro = ctx.createBiquadFilter();
+    filtro.type = 'bandpass';
+    const brillo = 1 + Math.min((tel.velocidadAngular || 0) / 60, 1) * 2;
+    filtro.frequency.value = randRange(300, 6000) * brillo;
+    filtro.Q.value = randRange(0.5, 8);
+
     const waveshaper = ctx.createWaveShaper();
     waveshaper.curve = curva;
     waveshaper.oversample = '2x';
+    const drive = ctx.createGain();
+    drive.gain.value = 1 + p.distorsion / 20;
+
     const env = ctx.createGain();
+    const nivelBase = Math.min(0.2 + (tel.magnitud || 0) * 0.05, 1);
     if (Math.random() < p.probCorte) {
-      env.gain.setValueAtTime(randRange(0.3, 1), t);
+      env.gain.setValueAtTime(randRange(0.3, 1) * nivelBase, t);
       env.gain.setValueAtTime(0, t + dur * randRange(0.3, 0.7));
     } else {
       env.gain.setValueAtTime(0, t);
-      env.gain.linearRampToValueAtTime(randRange(0.3, 1), t + 0.002);
+      env.gain.linearRampToValueAtTime(randRange(0.3, 1) * nivelBase, t + 0.002);
       env.gain.linearRampToValueAtTime(0, t + dur);
     }
-    src.connect(waveshaper); waveshaper.connect(env); env.connect(out);
+
+    src.connect(filtro); filtro.connect(drive); drive.connect(waveshaper);
+    waveshaper.connect(env); env.connect(fadeGain);
     src.start(t, offset, dur);
-    const densidad = randRange(p.densityMin, p.densityMax);
-    const intervalo = (1000 / densidad) * randRange(0.3, 1.7);
-    timeoutId = setTimeout(programarEvento, Math.max(intervalo, 5));
+
+    const densidadBase = p.densityMin + Math.min((tel.velocidad || 0) * 0.3, 1) * (p.densityMax - p.densityMin);
+    const intervalo = (1000 / Math.max(densidadBase, 1)) * randRange(0.2, 1.8 * inestabilidad);
+    timeoutId = setTimeout(programarEvento, Math.max(intervalo, 4));
   }
+
   return {
-    start() { if (activo) return; activo = true; programarEvento(); },
-    stop() { activo = false; clearTimeout(timeoutId); },
+    fadeGain,
+    iniciar() { if (activo) return; activo = true; programarEvento(); },
+    detener() { activo = false; clearTimeout(timeoutId); try { fadeGain.disconnect(); } catch (e) {} },
+    actualizarTelemetria() { /* se lee en vivo en cada evento via getTel() */ },
   };
 }
 
-// ── Motor: alternancia La2/Do3 (Celular 2 / STILL) ───────────────
-function crearMotorAlternancia(ctx, out, motorTono) {
-  let activo = false, timeoutId = null, freqActual;
-  function programarCambio() {
-    if (!activo) return;
-    const p = PARAMS.c2.still;
-    freqActual = freqActual === p.freqA ? p.freqC : p.freqA;
-    motorTono.setFreq(freqActual);
-    const dur = randRange(p.durMin, p.durMax) * 1000;
-    timeoutId = setTimeout(programarCambio, dur);
-  }
-  return {
-    start() {
-      if (activo) return;
-      activo = true;
-      const p = PARAMS.c2.still;
-      freqActual = p.freqA;
-      motorTono.start(freqActual, () => p);
-      programarCambio();
-    },
-    stop() { activo = false; clearTimeout(timeoutId); motorTono.stop(); },
-  };
-}
+// ── VoiceAudio: liga rol + estado a los motores, crossfade y mute ─
+const CROSSFADE_S = 0.3;
 
-// ── VoiceAudio: liga rol + estado a los motores, y aplica mute ───
 class VoiceAudio {
   constructor(ctx, master, ruido, curva) {
     this.ctx = ctx;
+    this.ruido = ruido;
+    this.curva = curva;
     this.gainMute = ctx.createGain();
     this.gainMute.gain.value = 1;
     this.gainMute.connect(master);
+
     this.role = null;
-    this.modo = null;
+    this.modo = null;            // 'SLOW' | 'STILL' | null
+    this.instanciaActual = null; // instancia del motor continuo activo
+    this.telemetria = {};
     this.muteUntil = 0;
     this.muteTimeoutId = null;
 
+    // motores de evento puntual (FAST): no necesitan crossfade
     this.percusion = crearMotorPercusion(ctx, this.gainMute, ruido);
-    this.granular = crearMotorGranular(ctx, this.gainMute, ruido);
-    this.tonoC1 = crearMotorTono(ctx, this.gainMute);
-    this.tonoC2 = crearMotorTono(ctx, this.gainMute);
-    this.toggleRuido = crearMotorToggleRuido(ctx, this.gainMute, ruido);
-    this.glitch = crearMotorGlitch(ctx, this.gainMute, ruido, curva);
-    this.alternancia = crearMotorAlternancia(ctx, this.gainMute, this.tonoC2);
+    this.toggleRuido = crearMotorToggleRuido(ctx, this.gainMute, ruido, curva);
   }
+
   setRole(role) {
     if (this.role === role) return;
-    this._detenerModo();
+    this._cambiarModo(null);
     this.role = role;
   }
-  _detenerModo() {
-    if (this.modo === 'SLOW') {
-      if (this.role === 'c1') this.granular.stop();
-      if (this.role === 'c2') this.glitch.stop();
-    } else if (this.modo === 'STILL') {
-      if (this.role === 'c1') this.tonoC1.stop();
-      if (this.role === 'c2') this.alternancia.stop();
+
+  _crearInstanciaPara(estado) {
+    const getTel = () => this.telemetria;
+    if (this.role === 'c1') {
+      if (estado === 'SLOW') return crearMotorGranular(this.ctx, this.ruido, getTel, () => PARAMS.c1.gran);
+      if (estado === 'STILL') return crearMotorRuidoEstable(this.ctx, this.ruido, getTel, () => PARAMS.c1.still);
+    } else if (this.role === 'c2') {
+      if (estado === 'SLOW') return crearMotorGlitch(this.ctx, this.ruido, this.curva, getTel, () => PARAMS.c2.glitch);
+      if (estado === 'STILL') return crearMotorRuidoEstable(this.ctx, this.ruido, getTel, () => PARAMS.c2.still);
     }
-    this.modo = null;
+    return null;
   }
+
+  // SLOW/STILL son mutuamente excluyentes: se cruza suavemente entre
+  // la instancia anterior (fade out) y la nueva (fade in), sin cortes.
+  _cambiarModo(nuevoEstado) {
+    const t = this.ctx.currentTime;
+    const anterior = this.instanciaActual;
+    if (anterior) {
+      const g = anterior.fadeGain.gain;
+      g.cancelScheduledValues(t);
+      g.setValueAtTime(g.value, t);
+      g.linearRampToValueAtTime(0, t + CROSSFADE_S);
+      setTimeout(() => anterior.detener(), CROSSFADE_S * 1000 + 60);
+    }
+    this.instanciaActual = null;
+
+    if (nuevoEstado && this.role) {
+      const inst = this._crearInstanciaPara(nuevoEstado);
+      if (inst) {
+        inst.fadeGain.connect(this.gainMute);
+        inst.iniciar();
+        inst.fadeGain.gain.setValueAtTime(0, t);
+        inst.fadeGain.gain.linearRampToValueAtTime(1, t + CROSSFADE_S);
+        this.instanciaActual = inst;
+      }
+    }
+    this.modo = nuevoEstado;
+  }
+
   setEstado(state) {
     if (!this.role || state === this.modo) return;
-    this._detenerModo();
-    this.modo = state;
-    if (state === 'SLOW') {
-      if (this.role === 'c1') this.granular.start();
-      if (this.role === 'c2') this.glitch.start();
-    } else if (state === 'STILL') {
-      if (this.role === 'c1') this.tonoC1.start(PARAMS.c1.still.freq, () => PARAMS.c1.still);
-      if (this.role === 'c2') this.alternancia.start();
-    }
+    this._cambiarModo(state);
   }
+
+  setTelemetria(tel) {
+    this.telemetria = tel;
+    if (this.instanciaActual) this.instanciaActual.actualizarTelemetria(tel);
+  }
+
   triggerFast() {
-    if (this.role === 'c1') this.percusion.trigger();
+    if (this.role === 'c1') this.percusion.trigger(this.telemetria);
     if (this.role === 'c2') this.toggleRuido.toggle();
   }
+
   aplicarMute({ duration }) {
     const t = this.ctx.currentTime;
     const fin = performance.now() + duration;
@@ -495,17 +587,18 @@ class VoiceAudio {
       this.gainMute.gain.setTargetAtTime(1, t2, 0.05);
     }, restante);
   }
+
   desconectar() {
-    this._detenerModo();
+    this._cambiarModo(null);
     clearTimeout(this.muteTimeoutId);
-    this.gainMute.disconnect();
+    try { this.gainMute.disconnect(); } catch (e) {}
   }
 }
 
 // ── Estado global: audio, voces, roles ───────────────────────────
 let audioCtx = null, masterGainNode = null, ruidoBuffer = null, curvaDistorsion = null;
 let masterVol = 0.7;
-const voces = new Map(); // id → { audio: VoiceAudio|null, role, state, faceUp, faceUpElapsed }
+const voces = new Map(); // id → { audio: VoiceAudio|null, role, state, faceUp, faceUpElapsed, telemetria }
 const roles = { c1: null, c2: null };
 
 function asignarRolAutomatico(id) {
@@ -532,7 +625,7 @@ function reasignarManual(id, rolNuevo) {
 function crearVozInfo(id) {
   if (voces.has(id)) return;
   const rol = asignarRolAutomatico(id);
-  const info = { audio: null, role: rol, state: null, faceUp: false, faceUpElapsed: 0 };
+  const info = { audio: null, role: rol, state: null, faceUp: false, faceUpElapsed: 0, telemetria: {} };
   voces.set(id, info);
   if (audioCtx) activarAudioDeVoz(id);
 }
@@ -592,7 +685,17 @@ function manejarControl(msg) {
     info.state = msg.state;
     info.faceUp = msg.faceUp;
     info.faceUpElapsed = msg.faceUpElapsed;
-    if (info.audio) info.audio.setEstado(msg.state);
+    info.telemetria = {
+      magnitud: msg.magnitud,
+      velocidad: msg.velocidad,
+      velocidadAngular: msg.velocidadAngular,
+      varianzaEjes: msg.varianzaEjes,
+      duracionEstado: msg.duracionEstado,
+    };
+    if (info.audio) {
+      info.audio.setTelemetria(info.telemetria);
+      info.audio.setEstado(msg.state);
+    }
   } else if (msg.kind === "event" && msg.event === "FAST") {
     if (info.audio) info.audio.triggerFast();
   } else if (msg.kind === "mute") {
@@ -640,14 +743,17 @@ setInterval(() => voces.forEach((_, id) => actualizarCard(id)), 300);
 
 // ── UI: panel de parámetros (generado desde PARAMS) ──────────────
 function inferirRango(key, val) {
-  if (/prob|irregularidad|fadeIn|fadeOut|microAmp|volumen/i.test(key)) return { min: 0, max: 1, step: 0.01 };
-  if (/freq/i.test(key)) return { min: 20, max: 1000, step: 0.01 };
-  if (/filter/i.test(key)) return { min: 20, max: 8000, step: 1 };
-  if (/density/i.test(key)) return { min: 1, max: 60, step: 1 };
-  if (/vibratoRate/i.test(key)) return { min: 0.5, max: 12, step: 0.1 };
-  if (/vibratoDepth/i.test(key)) return { min: 0, max: 30, step: 0.5 };
-  if (/dur|attack|decay|burst|grain/i.test(key)) return { min: 0, max: Math.max(val * 4, 0.5), step: 0.001 };
+  if (/prob|irregularidad|fadeIn|fadeOut|microAmp|volumen|saturacion/i.test(key)) return { min: 0, max: 1, step: 0.01 };
+  if (/velRef|PorVelocidad|PorVelAngular|PorMagnitud|densidadPor/i.test(key)) return { min: 0, max: Math.max(val * 3, 0.1), step: 0.01 };
+  if (/filterBase|filtroFrecuencia|filterMin|filterMax/i.test(key)) return { min: 20, max: 8000, step: 1 };
+  if (/densityMin|densityMax/i.test(key)) return { min: 1, max: 60, step: 1 };
+  if (/lfoRate|microRate/i.test(key)) return { min: 0.02, max: 12, step: 0.01 };
+  if (/lfoDepth/i.test(key)) return { min: 0, max: 400, step: 1 };
+  if (/(durMin|durMax|burstMin|burstMax)/i.test(key) && val > 1) return { min: 0, max: 500, step: 1 };
+  if (/dur|attack|decay|burst|grain/i.test(key)) return { min: 0, max: Math.max(val * 4, 0.05), step: 0.001 };
   if (/distorsion/i.test(key)) return { min: 0, max: 100, step: 1 };
+  if (/^q$/i.test(key)) return { min: 0.1, max: 10, step: 0.1 };
+  if (/nivel/i.test(key)) return { min: 0, max: 1, step: 0.01 };
   return { min: 0, max: Math.max(val * 3, 1), step: val < 1 ? 0.01 : 1 };
 }
 function crearPanelParams(container, obj, path = []) {
