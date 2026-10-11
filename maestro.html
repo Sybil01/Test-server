@@ -494,6 +494,23 @@ function crearMotorGlitch(ctx, ruido, curva, getTel, getParams) {
 const CROSSFADE_S = 0.3;
 
 class VoiceAudio {
+  setMuteManual(activo) {
+  if (activo === this.muteManual) return;
+  this.muteManual = activo;
+  const t = this.ctx.currentTime;
+  this.gainManual.gain.cancelScheduledValues(t);
+  this.gainManual.gain.setTargetAtTime(activo ? 0 : 1, t, 0.02);
+  if (activo) {
+    this._cambiarModo(null);                      // detiene el motor continuo
+  } else if (this.estadoPendiente) {
+    this._cambiarModo(this.estadoPendiente);      // retoma el estado actual
+  }
+}
+  setEstado(state) {
+  this.estadoPendiente = state;                   // se recuerda aunque esté muteado
+  if (this.muteManual || !this.role || state === this.modo) return;
+  this._cambiarModo(state);
+}
   constructor(ctx, master, ruido, curva) {
     this.ctx = ctx;
     this.ruido = ruido;
@@ -575,6 +592,7 @@ class VoiceAudio {
   }
 
   triggerFast() {
+    if (this.muteManual) return;
     if (this.role === 'c1') this.percusion.trigger(this.telemetria);
     if (this.role === 'c2') this.toggleRuido.toggle();
   }
@@ -589,6 +607,7 @@ class VoiceAudio {
   }
 
   aplicarMute({ duration }) {
+    if (this.muteManual) return;
     const t = this.ctx.currentTime;
     const fin = performance.now() + duration;
     this.muteUntil = Math.max(this.muteUntil, fin);
