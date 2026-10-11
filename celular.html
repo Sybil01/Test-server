@@ -139,6 +139,25 @@ body {
 }
 #estado-ws.conectado { color: var(--c-accent); opacity: 0.7; }
 #estado-ws.desconectado { color: #ff4444; opacity: 0.7; }
+#btn-mute {
+  width: 72px;
+  height: 72px;
+  background: transparent;
+  border: 1px solid var(--c-accent);
+  color: var(--c-accent);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.8rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+#btn-mute.activo {
+  background: var(--c-accent-mute);
+  border-color: var(--c-accent-mute);
+  color: #000;
+}
 #flash-overlay {
   position: fixed;
   inset: 0;
@@ -186,6 +205,7 @@ body {
       <span class="metrica-valor" id="m-faceup">0.0s</span>
     </div>
   </div>
+  <button id="btn-mute" type="button" aria-pressed="false">mute</button>
   <div id="estado-ws">conectando…</div>
 </div>
 
@@ -231,9 +251,7 @@ const CFG = {
   // FACE_UP — orientación (boca arriba), independiente de FAST/SLOW/STILL
   FACEUP_AZ_THRESHOLD: 8.3,   // az (accel. incl. gravedad) por encima de esto = boca arriba
   FACEUP_TOLERANCE_GAP: 300,  // ms de tolerancia a dropouts del sensor
-  FACEUP_T1: 2000,   // ms → dispara silencio corto
-  FACEUP_T1_MUTE: 5000,
-  FACEUP_T2: 5000,   // ms → dispara silencio largo (prioridad sobre el corto)
+  FACEUP_T2: 5000,   // ms boca arriba → dispara el silencio (el corto de 2 s se eliminó)
   FACEUP_T2_MUTE: 20000,
 
   SEND_RATE: 20, // Hz — frecuencia de envío del estado continuo (heartbeat)
@@ -267,7 +285,6 @@ const Gestos = (() => {
   let faceUpActive = false;
   let faceUpStart = null;
   let faceUpLastMatch = 0;
-  let faceUpT1Fired = false;
   let faceUpT2Fired = false;
 
   // callbacks hacia afuera (los conecta el módulo de transporte)
@@ -325,7 +342,6 @@ const Gestos = (() => {
       if (!faceUpActive) {
         faceUpActive = true;
         faceUpStart = now;
-        faceUpT1Fired = false;
         faceUpT2Fired = false;
       }
     } else if (faceUpActive && (now - faceUpLastMatch) > CFG.FACEUP_TOLERANCE_GAP) {
@@ -335,13 +351,10 @@ const Gestos = (() => {
 
     if (faceUpActive) {
       const elapsed = now - faceUpStart;
-      // el umbral de 5s tiene prioridad: se chequea primero
+      // único silencio automático: boca arriba >= FACEUP_T2 → mute de FACEUP_T2_MUTE ms
       if (!faceUpT2Fired && elapsed >= CFG.FACEUP_T2) {
         faceUpT2Fired = true;
         onMuteEvent({ duration: CFG.FACEUP_T2_MUTE, priority: true });
-      } else if (!faceUpT1Fired && elapsed >= CFG.FACEUP_T1) {
-        faceUpT1Fired = true;
-        onMuteEvent({ duration: CFG.FACEUP_T1_MUTE, priority: false });
       }
     }
   }
@@ -422,6 +435,7 @@ const WS_URL = (() => {
 let ws = null;
 let myId = null;
 let lastSend = 0;
+let muteManual = false; // botón "mute": silencia este celular hasta volver a tocarlo
 
 function conectarWS() {
   ws = new WebSocket(WS_URL);
@@ -453,6 +467,7 @@ function enviarEstado() {
     state: Gestos.getState(),
     faceUp: Gestos.isFaceUp(),
     faceUpElapsed: Math.round(Gestos.getFaceUpElapsed()),
+    muteManual,
     // telemetría continua para que el maestro module el sonido en vivo
     magnitud: +Gestos.getSmoothedDev().toFixed(3),
     velocidad: +Gestos.getVelocidad().toFixed(3),
@@ -513,8 +528,11 @@ function drawViz() {
   const faceUpElapsed = Gestos.getFaceUpElapsed();
 
   // Texto de estado
-  if (faceUp && faceUpElapsed >= CFG.FACEUP_T1) {
-    estadoGestoEl.textContent = faceUpElapsed >= CFG.FACEUP_T2 ? "silencio largo" : "silencio corto";
+  if (muteManual) {
+    estadoGestoEl.textContent = "mute";
+    estadoGestoEl.className = "mute";
+  } else if (faceUp && faceUpElapsed >= CFG.FACEUP_T2) {
+    estadoGestoEl.textContent = "silencio";
     estadoGestoEl.className = "mute";
   } else if (state === "STILL") {
     estadoGestoEl.textContent = "STILL";
@@ -540,8 +558,7 @@ function drawViz() {
 
   // Arco de progreso de FACE_UP (si está boca arriba)
   if (faceUp) {
-    const target = faceUpElapsed >= CFG.FACEUP_T1 ? CFG.FACEUP_T2 : CFG.FACEUP_T1;
-    const frac = Math.min(faceUpElapsed / target, 1);
+    const frac = Math.min(faceUpElapsed / CFG.FACEUP_T2, 1);
     ctx.beginPath();
     ctx.arc(CX, CY, 95, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2);
     ctx.strokeStyle = "rgba(255,68,102,0.8)";
@@ -560,6 +577,15 @@ function drawViz() {
     lastSend = now;
   }
 }
+
+// ── Botón mute (toggle) ───────────────────────────────────────────
+const btnMute = document.getElementById("btn-mute");
+btnMute.addEventListener("click", () => {
+  muteManual = !muteManual;
+  btnMute.classList.toggle("activo", muteManual);
+  btnMute.setAttribute("aria-pressed", String(muteManual));
+  enviarEstado(); // el maestro se entera de inmediato, sin esperar al próximo heartbeat
+});
 
 // ── Activación ────────────────────────────────────────────────────
 document.getElementById("btn-activar").addEventListener("click", () => {

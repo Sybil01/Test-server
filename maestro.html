@@ -498,9 +498,14 @@ class VoiceAudio {
     this.ctx = ctx;
     this.ruido = ruido;
     this.curva = curva;
+    // cadena: motores → gainMute (silencio por boca arriba) → gainManual (botón mute del celular) → master
+    this.gainManual = ctx.createGain();
+    this.gainManual.gain.value = 1;
+    this.gainManual.connect(master);
     this.gainMute = ctx.createGain();
     this.gainMute.gain.value = 1;
-    this.gainMute.connect(master);
+    this.gainMute.connect(this.gainManual);
+    this.muteManual = false;
 
     this.role = null;
     this.modo = null;            // 'SLOW' | 'STILL' | null
@@ -574,6 +579,15 @@ class VoiceAudio {
     if (this.role === 'c2') this.toggleRuido.toggle();
   }
 
+  // Botón "mute" del celular: independiente del silencio por boca arriba.
+  setMuteManual(activo) {
+    if (activo === this.muteManual) return;
+    this.muteManual = activo;
+    const t = this.ctx.currentTime;
+    this.gainManual.gain.cancelScheduledValues(t);
+    this.gainManual.gain.setTargetAtTime(activo ? 0 : 1, t, 0.02);
+  }
+
   aplicarMute({ duration }) {
     const t = this.ctx.currentTime;
     const fin = performance.now() + duration;
@@ -592,6 +606,7 @@ class VoiceAudio {
     this._cambiarModo(null);
     clearTimeout(this.muteTimeoutId);
     try { this.gainMute.disconnect(); } catch (e) {}
+    try { this.gainManual.disconnect(); } catch (e) {}
   }
 }
 
@@ -685,6 +700,7 @@ function manejarControl(msg) {
     info.state = msg.state;
     info.faceUp = msg.faceUp;
     info.faceUpElapsed = msg.faceUpElapsed;
+    info.muteManual = !!msg.muteManual;
     info.telemetria = {
       magnitud: msg.magnitud,
       velocidad: msg.velocidad,
@@ -693,13 +709,16 @@ function manejarControl(msg) {
       duracionEstado: msg.duracionEstado,
     };
     if (info.audio) {
+      info.audio.setMuteManual(info.muteManual);
       info.audio.setTelemetria(info.telemetria);
       info.audio.setEstado(msg.state);
     }
   } else if (msg.kind === "event" && msg.event === "FAST") {
     if (info.audio) info.audio.triggerFast();
   } else if (msg.kind === "mute") {
-    if (info.audio) info.audio.aplicarMute(msg);
+    // Solo se acepta el silencio largo (priority: true). El corto de 2 s ya no existe;
+    // esto además ignora a un celular con la versión vieja de la página en caché.
+    if (info.audio && msg.priority) info.audio.aplicarMute(msg);
   }
   actualizarCard(msg.id);
 }
@@ -737,7 +756,7 @@ function actualizarCard(id) {
   setTxt(`${id}-estado`, info.state || "—");
   setTxt(`${id}-faceup`, info.faceUp ? (info.faceUpElapsed / 1000).toFixed(1) + "s" : "—");
   const card = document.getElementById(`card-${id}`);
-  if (card) card.classList.toggle("muted", info.audio && info.audio.muteUntil > performance.now());
+  if (card) card.classList.toggle("muted", !!info.audio && (info.audio.muteUntil > performance.now() || info.audio.muteManual));
 }
 setInterval(() => voces.forEach((_, id) => actualizarCard(id)), 300);
 
