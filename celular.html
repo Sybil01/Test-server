@@ -336,13 +336,12 @@ const Gestos = (() => {
   }
 
   function updateFaceUp(az, now) {
-    function updateFaceUp(az, now) {
   if (muteManual) {
     faceUpActive = false;
     faceUpStart = null;
     return;
   }
-    const isFaceUpRaw = az > CFG.FACEUP_AZ_THRESHOLD;
+  const isFaceUpRaw = az > CFG.FACEUP_AZ_THRESHOLD;
     if (isFaceUpRaw) {
       faceUpLastMatch = now;
       if (!faceUpActive) {
@@ -427,7 +426,7 @@ const Gestos = (() => {
     isFaceUp() { return faceUpActive; },
     getFaceUpElapsed: faceUpElapsedMs,
   };
-};
+})();
 
 // ── Módulo B: transporte (WebSocket) ────────────────────────────
 const WS_URL = (() => {
@@ -486,7 +485,6 @@ function enviarEstado() {
 function enviarEventoFast() {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   if (muteManual) return;
-  if (!ws || ws.readyState !== WebSocket.OPEN) return;
   ws.send(JSON.stringify({ type: "control", kind: "event", event: "FAST" }));
   flashEffect(0.3);
 }
@@ -616,7 +614,7 @@ document.getElementById("btn-activar").addEventListener("click", () => {
   } else {
     activar();
   }
-})});
+});
 </script>
 </body>
 </html>
