@@ -494,9 +494,11 @@ setMuteManual(activo) {
   this._cambiarModo(activo ? null : this.estadoPendiente);
 }
 triggerFast() {
-  if (this.muteManual || !this.role) return;
-  this.toggleRuido.toggle();                  // C1 (copia) y C2 comparten el mismo motor FAST
+  if (this.muteManual) return;
+  if (this.role === 'c1') this.percusion.trigger(this.telemetria);
+  if (this.role === 'c2') this.toggleRuido.toggle();
 }
+  
 setRole(role) {
   if (this.role === role) return;
   this._cambiarModo(null);
