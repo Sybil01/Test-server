@@ -230,9 +230,7 @@ function crearCurvaDistorsion(cantidad = 40) {
   return curve;
 }
 
-// CELULAR 1 = FREEZE DE CELULAR 2
-let idCel1 = null, idCel2 = null;   // se asignan con click en el maestro
-let vozC1 = null, vozC2 = null;     // instancias de tu clase de voz
+// ── Freeze: C1 congela la copia de C2 ────────────────────────────
 let congelado = false;
 
 // Histéresis: entra a 70°–110°, sale al pasar 55°–125°
@@ -240,16 +238,18 @@ function enVertical(beta) {
   const b = Math.abs(beta);
   return congelado ? (b > 55 && b < 125) : (b > 70 && b < 110);
 }
-
-function recibirControl(msg) {
-  if (msg.id === idCel1) {
-    congelado = enVertical(msg.beta);   // C1 solo decide freeze o no
-    return;
-  }
-  if (msg.id === idCel2) {
-    vozC2.actualizar(msg);                            // C2 siempre en vivo
-    if (vozC1 && !congelado) vozC1.actualizar(msg);   // C1 copia solo si no está congelado
-  }
+function audioDe(rol) {
+  const id = roles[rol];
+  return id && voces.get(id) ? voces.get(id).audio : null;
+}
+// Al descongelar (o reasignar roles), C1 vuelve a alinearse con C2
+function resincronizarC1() {
+  const c1 = audioDe('c1'), c2 = audioDe('c2'), idC2 = roles.c2;
+  if (!c1) return;
+  const infoC2 = idC2 ? voces.get(idC2) : null;
+  c1.setTelemetria(infoC2 ? infoC2.telemetria : {});
+  c1.setEstado(infoC2 ? infoC2.state : null);
+  c1.toggleRuido.forzar(c2 ? c2.toggleRuido.activo : false);
 }
   
 // ── Motor: ruido estable (STILL — C1 y C2, sin altura tonal) ─────
