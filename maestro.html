@@ -322,42 +322,36 @@ function crearMotorRuidoEstable(ctx, ruido, getTel, getParams) {
 // ── Motor: toggle de ruido blanco (Celular 2 / FAST) ─────────────
 function crearMotorToggleRuido(ctx, out, ruido, curva) {
   let activo = false, src = null, gainNode = null;
+  function encender() {
+    const p = PARAMS.c2.fast, t = ctx.currentTime;
+    src = ctx.createBufferSource();
+    src.buffer = ruido; src.loop = true;
+    const filtro = ctx.createBiquadFilter();
+    filtro.type = 'lowpass'; filtro.frequency.value = p.filtroFrecuencia;
+    const drive = ctx.createGain(); drive.gain.value = 1 + p.saturacion * 4;
+    const shaper = ctx.createWaveShaper(); shaper.curve = curva; shaper.oversample = '2x';
+    gainNode = ctx.createGain();
+    gainNode.gain.setValueAtTime(0, t);
+    gainNode.gain.linearRampToValueAtTime(p.volumen, t + Math.max(p.fadeIn, 0.001));
+    src.connect(filtro); filtro.connect(drive); drive.connect(shaper);
+    shaper.connect(gainNode); gainNode.connect(out);
+    src.start(t);
+  }
+  function silenciar() {
+    if (!gainNode) return;
+    const p = PARAMS.c2.fast, t = ctx.currentTime, s = src;
+    gainNode.gain.setValueAtTime(gainNode.gain.value, t);
+    gainNode.gain.linearRampToValueAtTime(0, t + Math.max(p.fadeOut, 0.001));
+    setTimeout(() => { try { s.stop(); } catch (e) {} }, p.fadeOut * 1000 + 50);
+    src = null; gainNode = null;
+  }
   return {
-    toggle() {
-      const p = PARAMS.c2.fast;
-      const t = ctx.currentTime;
-      activo = !activo;
-      if (activo) {
-        src = ctx.createBufferSource();
-        src.buffer = ruido; src.loop = true;
-
-        const filtro = ctx.createBiquadFilter();
-        filtro.type = 'lowpass';
-        filtro.frequency.value = p.filtroFrecuencia;
-
-        const drive = ctx.createGain();
-        drive.gain.value = 1 + p.saturacion * 4;
-        const waveshaper = ctx.createWaveShaper();
-        waveshaper.curve = curva;
-        waveshaper.oversample = '2x';
-
-        gainNode = ctx.createGain();
-        gainNode.gain.setValueAtTime(0, t);
-        gainNode.gain.linearRampToValueAtTime(p.volumen, t + Math.max(p.fadeIn, 0.001));
-
-        src.connect(filtro); filtro.connect(drive); drive.connect(waveshaper);
-        waveshaper.connect(gainNode); gainNode.connect(out);
-        src.start(t);
-      } else if (gainNode) {
-        gainNode.gain.setValueAtTime(gainNode.gain.value, t);
-        gainNode.gain.linearRampToValueAtTime(0, t + Math.max(p.fadeOut, 0.001));
-        const s = src;
-        setTimeout(() => { try { s.stop(); } catch (e) {} }, p.fadeOut * 1000 + 50);
-      }
-    },
+    get activo() { return activo; },
+    forzar(v) { v = !!v; if (v === activo) return; activo = v; v ? encender() : silenciar(); },
+    toggle() { this.forzar(!activo); },
+    apagar() { activo = false; silenciar(); },
   };
 }
-
 // ── Motor: glitch agresivo (Celular 2 / SLOW — ref. AV3RY) ───────
 function crearMotorGlitch(ctx, ruido, curva, getTel, getParams) {
   const fadeGain = ctx.createGain();
@@ -421,23 +415,8 @@ function crearMotorGlitch(ctx, ruido, curva, getTel, getParams) {
 const CROSSFADE_S = 0.3;
 
 class VoiceAudio {
-  setMuteManual(activo) {
-  if (activo === this.muteManual) return;
-  this.muteManual = activo;
-  const t = this.ctx.currentTime;
-  this.gainManual.gain.cancelScheduledValues(t);
-  this.gainManual.gain.setTargetAtTime(activo ? 0 : 1, t, 0.02);
-  if (activo) {
-    this._cambiarModo(null);                      // detiene el motor continuo
-  } else if (this.estadoPendiente) {
-    this._cambiarModo(this.estadoPendiente);      // retoma el estado actual
-  }
-}
-  setEstado(state) {
-  this.estadoPendiente = state;                   // se recuerda aunque esté muteado
-  if (this.muteManual || !this.role || state === this.modo) return;
-  this._cambiarModo(state);
-}
+
+  
   constructor(ctx, master, ruido, curva) {
     this.ctx = ctx;
     this.ruido = ruido;
@@ -460,12 +439,6 @@ class VoiceAudio {
 
     // motores de evento puntual (FAST): no necesitan crossfade
     this.toggleRuido = crearMotorToggleRuido(ctx, this.gainMute, ruido, curva);
-  }
-
-  setRole(role) {
-    if (this.role === role) return;
-    this._cambiarModo(null);
-    this.role = role;
   }
 
   _crearInstanciaPara(estado) {
@@ -502,31 +475,36 @@ class VoiceAudio {
     this.modo = nuevoEstado;
   }
 
-  setEstado(state) {
-    if (!this.role || state === this.modo) return;
-    this._cambiarModo(state);
-  }
-
   setTelemetria(tel) {
     this.telemetria = tel;
     if (this.instanciaActual) this.instanciaActual.actualizarTelemetria(tel);
   }
 
-  triggerFast() {
-    if (this.muteManual) return;
-    if (this.role === 'c1') this.percusion.trigger(this.telemetria);
-    if (this.role === 'c2') this.toggleRuido.toggle();
-  }
-
-  // Botón "mute" del celular: independiente del silencio por boca arriba.
-  setMuteManual(activo) {
-    if (activo === this.muteManual) return;
-    this.muteManual = activo;
-    const t = this.ctx.currentTime;
-    this.gainManual.gain.cancelScheduledValues(t);
-    this.gainManual.gain.setTargetAtTime(activo ? 0 : 1, t, 0.02);
-  }
-
+  setEstado(state) {
+  this.estadoPendiente = state;               // se recuerda aunque esté muteada
+  if (this.muteManual || !this.role || state === this.modo) return;
+  this._cambiarModo(state);
+}
+setMuteManual(activo) {
+  if (activo === this.muteManual) return;
+  this.muteManual = activo;
+  const t = this.ctx.currentTime;
+  this.gainManual.gain.cancelScheduledValues(t);
+  this.gainManual.gain.setTargetAtTime(activo ? 0 : 1, t, 0.02);
+  this._cambiarModo(activo ? null : this.estadoPendiente);
+}
+triggerFast() {
+  if (this.muteManual || !this.role) return;
+  this.toggleRuido.toggle();                  // C1 (copia) y C2 comparten el mismo motor FAST
+}
+setRole(role) {
+  if (this.role === role) return;
+  this._cambiarModo(null);
+  this.toggleRuido.apagar();
+  this.role = role;
+  if (role && !this.muteManual && this.estadoPendiente) this._cambiarModo(this.estadoPendiente);
+}
+  
   aplicarMute({ duration }) {
     if (this.muteManual) return;
     const t = this.ctx.currentTime;
@@ -545,6 +523,7 @@ class VoiceAudio {
   desconectar() {
     this._cambiarModo(null);
     clearTimeout(this.muteTimeoutId);
+    this.toggleRuido.apagar();
     try { this.gainMute.disconnect(); } catch (e) {}
     try { this.gainManual.disconnect(); } catch (e) {}
   }
@@ -574,6 +553,7 @@ function reasignarManual(id, rolNuevo) {
     v.role = rolNuevo;
     if (v.audio) v.audio.setRole(rolNuevo);
   }
+  congelado = false; resincronizarC1();
   renderVoces();
 }
 
@@ -596,6 +576,7 @@ function eliminarVoz(id) {
   if (info.audio) info.audio.desconectar();
   Object.keys(roles).forEach(r => { if (roles[r] === id) roles[r] = null; });
   voces.delete(id);
+  if (!roles.c1) congelado = false;
 }
 
 // ── WebSocket ─────────────────────────────────────────────────────
@@ -636,28 +617,43 @@ function conectarWS() {
 function manejarControl(msg) {
   const info = voces.get(msg.id);
   if (!info) return;
+
   if (msg.kind === "state") {
     info.state = msg.state;
     info.faceUp = msg.faceUp;
     info.faceUpElapsed = msg.faceUpElapsed;
     info.muteManual = !!msg.muteManual;
     info.telemetria = {
-      magnitud: msg.magnitud,
-      velocidad: msg.velocidad,
-      velocidadAngular: msg.velocidadAngular,
-      varianzaEjes: msg.varianzaEjes,
+      magnitud: msg.magnitud, velocidad: msg.velocidad,
+      velocidadAngular: msg.velocidadAngular, varianzaEjes: msg.varianzaEjes,
       duracionEstado: msg.duracionEstado,
     };
-    if (info.audio) {
-      info.audio.setMuteManual(info.muteManual);
-      info.audio.setTelemetria(info.telemetria);
-      info.audio.setEstado(msg.state);
+    if (typeof msg.beta === "number") info.beta = msg.beta;
+
+    if (info.role === "c1") {
+      // C1 solo decide el freeze; su voz es una copia de C2
+      if (typeof msg.beta === "number") {
+        const antes = congelado;
+        congelado = enVertical(msg.beta);
+        if (antes && !congelado) resincronizarC1();
+      }
+      if (info.audio) info.audio.setMuteManual(info.muteManual);
+    } else if (info.role === "c2") {
+      if (info.audio) {
+        info.audio.setMuteManual(info.muteManual);
+        info.audio.setTelemetria(info.telemetria);
+        info.audio.setEstado(msg.state);
+      }
+      const c1 = audioDe("c1");
+      if (c1 && !congelado) { c1.setTelemetria(info.telemetria); c1.setEstado(msg.state); }
     }
   } else if (msg.kind === "event" && msg.event === "FAST") {
-    if (info.audio) info.audio.triggerFast();
+    if (info.role === "c2") {
+      if (info.audio) info.audio.triggerFast();
+      const c1 = audioDe("c1");
+      if (c1 && !congelado) c1.triggerFast();
+    }
   } else if (msg.kind === "mute") {
-    // Solo se acepta el silencio largo (priority: true). El corto de 2 s ya no existe;
-    // esto además ignora a un celular con la versión vieja de la página en caché.
     if (info.audio && msg.priority) info.audio.aplicarMute(msg);
   }
   actualizarCard(msg.id);
