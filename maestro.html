@@ -196,15 +196,6 @@ main {
 
 // ── PARAMS: todo lo que el panel de la derecha permite ajustar ──
 const PARAMS = {
-  c1: {
-    fast: { durMin: 20, durMax: 150, velRefDuracion: 8, brilloPorVelocidad: 1.5,
-            filterBase: 1200, amplitudPorMagnitud: 0.08 },
-    gran: { grainMin: 0.008, grainMax: 0.05, densityMin: 8, densityMax: 45,
-            filterMin: 400, filterMax: 7000, densidadPorVelocidad: 0.05,
-            brilloPorVelAngular: 1.2, nivelPorMagnitud: 0.06 },
-    still: { filterBase: 900, q: 2.5, nivel: 0.35, lfoRate: 0.15, lfoDepth: 120,
-             microRate: 0.6, microAmp: 0.03, brilloPorVelAngular: 0.6 },
-  },
   c2: {
     fast:   { fadeIn: 0.015, fadeOut: 0.05, volumen: 0.4, filtroFrecuencia: 6000, saturacion: 0 },
     glitch: { densityMin: 6, densityMax: 40, probCorte: 0.35, burstMin: 0.015,
@@ -260,92 +251,28 @@ function recibirControl(msg) {
   }
 }
   
-// ── Motor: impulso de ruido puntual (Celular 1 / FAST) ───────────
-// Evento único, duración independiente del estado continuo activo.
-function crearMotorPercusion(ctx, out, ruido) {
-  return {
-    trigger(tel = {}) {
-      const p = PARAMS.c1.fast;
-      const t = ctx.currentTime;
-      const magnitud = tel.magnitud || 0;
-      const velRel = Math.min((tel.velocidad || 0) / p.velRefDuracion, 1);
+// CELULAR 1 = FREEZE DE CELULAR 2
+let idCel1 = null, idCel2 = null;
+let congelado = false;
+let ultimaTelC2 = null;   // último estado de C2 (lo que se "congela")
 
-      // más velocidad de gesto → impulso más corto y más agudo
-      const durMs = p.durMax - velRel * (p.durMax - p.durMin);
-      const dur = Math.max(Math.min(durMs, p.durMax), p.durMin) / 1000;
-
-      const src = ctx.createBufferSource();
-      src.buffer = ruido;
-      src.playbackRate.value = 1 + velRel * p.brilloPorVelocidad;
-
-      const filtro = ctx.createBiquadFilter();
-      filtro.type = 'bandpass';
-      filtro.frequency.value = p.filterBase * (1 + velRel * 1.5);
-      filtro.Q.value = randRange(1, 4);
-
-      const env = ctx.createGain();
-      const amp = Math.min(0.3 + magnitud * p.amplitudPorMagnitud, 1);
-      // attack inmediato, máxima energía inicial, corte abrupto + cola corta
-      env.gain.setValueAtTime(amp, t);
-      env.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-
-      src.connect(filtro); filtro.connect(env); env.connect(out);
-      src.start(t);
-      src.stop(t + dur + 0.02);
-    },
-  };
+function enVertical(beta) {
+  const b = Math.abs(beta);
+  return congelado ? (b > 55 && b < 125) : (b > 70 && b < 110);
 }
 
-// ── Motor: granular (Celular 1 / SLOW — ref. Vaggione) ───────────
-// Instancia efímera: se crea al entrar en SLOW, se destruye al salir.
-function crearMotorGranular(ctx, ruido, getTel, getParams) {
-  const fadeGain = ctx.createGain();
-  fadeGain.gain.value = 0;
-  let activo = false, timeoutId = null;
-
-  function programarGrano() {
-    if (!activo) return;
-    const p = getParams();
-    const tel = getTel() || {};
-    const t = ctx.currentTime;
-    const irregularidad = Math.min(0.3 + (tel.varianzaEjes || 0), 1.5);
-
-    const dur = randRange(p.grainMin, p.grainMax);
-    const src = ctx.createBufferSource();
-    src.buffer = ruido;
-    src.playbackRate.value = randRange(0.5, 2.5) * (Math.random() < 0.5 ? 1 : -1);
-    const offset = Math.max(Math.random() * (ruido.duration - dur - 0.02), 0);
-
-    const filtro = ctx.createBiquadFilter();
-    filtro.type = Math.random() < 0.5 ? 'bandpass' : 'highpass';
-    const centro = p.filterMin + Math.random() * (p.filterMax - p.filterMin);
-    const brillo = 1 + Math.min((tel.velocidadAngular || 0) / 60, 1) * p.brilloPorVelAngular;
-    filtro.frequency.value = centro * brillo;
-    filtro.Q.value = randRange(0.5, 6);
-
-    const env = ctx.createGain();
-    const nivelBase = Math.min(0.15 + (tel.magnitud || 0) * p.nivelPorMagnitud, 1);
-    const amp = randRange(0.15, 1) * nivelBase * (1 - irregularidad * 0.3 + Math.random() * irregularidad * 0.3);
-    env.gain.setValueAtTime(0, t);
-    env.gain.linearRampToValueAtTime(Math.max(amp, 0), t + dur * 0.3);
-    env.gain.linearRampToValueAtTime(0, t + dur);
-
-    src.connect(filtro); filtro.connect(env); env.connect(fadeGain);
-    src.start(t, offset, dur);
-
-    const densidadBase = p.densityMin + Math.min((tel.velocidad || 0) * p.densidadPorVelocidad, 1) * (p.densityMax - p.densityMin);
-    const intervalo = (1000 / Math.max(densidadBase, 1)) * randRange(1 - irregularidad * 0.4, 1 + irregularidad * 0.6);
-    timeoutId = setTimeout(programarGrano, Math.max(intervalo, 4));
+function recibirControl(msg) {
+  if (msg.id === idCel1) {
+    congelado = enVertical(msg.beta);   // C1 solo decide freeze o no
+    return;
   }
-
-  return {
-    fadeGain,
-    iniciar() { if (activo) return; activo = true; programarGrano(); },
-    detener() { activo = false; clearTimeout(timeoutId); try { fadeGain.disconnect(); } catch (e) {} },
-    actualizarTelemetria() { /* se lee en vivo en cada grano via getTel() */ },
-  };
+  if (msg.id === idCel2) {
+    ultimaTelC2 = msg;
+    procesarTelemetria(idCel2, msg);                 // ← tu función actual
+    if (idCel1 && !congelado) procesarTelemetria(idCel1, msg); // C1 copia en vivo
+  }
 }
-
+  
 // ── Motor: ruido estable (STILL — C1 y C2, sin altura tonal) ─────
 function crearMotorRuidoEstable(ctx, ruido, getTel, getParams) {
   const fadeGain = ctx.createGain();
@@ -565,16 +492,11 @@ class VoiceAudio {
 
   _crearInstanciaPara(estado) {
     const getTel = () => this.telemetria;
-    if (this.role === 'c1') {
-      if (estado === 'SLOW') return crearMotorGranular(this.ctx, this.ruido, getTel, () => PARAMS.c1.gran);
-      if (estado === 'STILL') return crearMotorRuidoEstable(this.ctx, this.ruido, getTel, () => PARAMS.c1.still);
-    } else if (this.role === 'c2') {
-      if (estado === 'SLOW') return crearMotorGlitch(this.ctx, this.ruido, this.curva, getTel, () => PARAMS.c2.glitch);
-      if (estado === 'STILL') return crearMotorRuidoEstable(this.ctx, this.ruido, getTel, () => PARAMS.c2.still);
-    }
+    if (estado === 'SLOW')  return crearMotorGlitch(this.ctx, this.ruido, this.curva, getTel, () => PARAMS.c2.glitch);
+    if (estado === 'STILL') return crearMotorRuidoEstable(this.ctx, this.ruido, getTel, () => PARAMS.c2.still);
     return null;
   }
-
+  
   // SLOW/STILL son mutuamente excluyentes: se cruza suavemente entre
   // la instancia anterior (fade out) y la nueva (fade in), sin cortes.
   _cambiarModo(nuevoEstado) {
