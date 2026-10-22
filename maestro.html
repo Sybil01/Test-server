@@ -239,6 +239,27 @@ function crearCurvaDistorsion(cantidad = 40) {
   return curve;
 }
 
+// CELULAR 1
+let idCel1 = null, idCel2 = null;   // los que asignás con click
+let congelado = false;
+
+// Histéresis para que no parpadee en el borde: entra a 70°–110°, sale pasando 55°–125°
+function enVertical(beta) {
+  const b = Math.abs(beta);
+  return congelado ? (b > 55 && b < 125) : (b > 70 && b < 110);
+}
+
+function recibirControl(msg) {
+  if (msg.id === idCel1) {          // celular 1 no suena con sus sensores,
+    congelado = enVertical(msg.beta); // solo decide si congela o no
+    return;
+  }
+  aplicarParametros(msg.id, msg);
+  if (msg.id === idCel2 && idCel1 && !congelado) {
+    aplicarParametros(idCel1, msg); // la voz de cel 1 sigue a cel 2 en vivo
+  }
+}
+  
 // ── Motor: impulso de ruido puntual (Celular 1 / FAST) ───────────
 // Evento único, duración independiente del estado continuo activo.
 function crearMotorPercusion(ctx, out, ruido) {
