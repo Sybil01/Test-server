@@ -459,7 +459,6 @@ class VoiceAudio {
     this.muteTimeoutId = null;
 
     // motores de evento puntual (FAST): no necesitan crossfade
-    this.percusion = crearMotorPercusion(ctx, this.gainMute, ruido);
     this.toggleRuido = crearMotorToggleRuido(ctx, this.gainMute, ruido, curva);
   }
 
